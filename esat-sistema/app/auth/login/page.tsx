@@ -27,11 +27,11 @@ export default function AsistenciaPage() {
     setLoading(true)
     setError('')
 
-    // Para 'miembro': login con DNI — construimos email ficticio
     const email = card === 'miembro'
-      ? `${user.trim()}@esat.local`
-      : user.trim()
-    const password = card === 'miembro' ? pass || user.trim() : pass
+  ? `${user.trim()}@sistema.esat`  // ← Dominio que parece oficial
+  : user.trim()
+const password = card === 'miembro' ? pass || user.trim() : pass
+
 
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
     if (authError) {
