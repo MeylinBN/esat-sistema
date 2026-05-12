@@ -84,6 +84,11 @@ body {
 .btn-s { background: white; color: var(--txt); border: 1.5px solid var(--borde); }
 .btn-s:hover { border-color: var(--azul3); color: var(--azul); }
 .btn-sm { padding: 6px 11px; font-size: 11px; }
+.btn-xs { padding: 4px 9px !important; font-size: 10px !important; }
+.btn-d  { background: #fee2e2 !important; color: #b91c1c !important; border: 1px solid #fca5a5 !important; }
+.btn-d:hover { background: #fecaca !important; }
+.btn-g  { background: #dbeafe !important; color: #1d4ed8 !important; border: 1px solid #93c5fd !important; }
+.btn-g:hover { background: #bfdbfe !important; }
 
 /* ── BADGES ── */
 .badge {
