@@ -3,37 +3,84 @@ import { getRolLabel } from '@/types'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 
 export const revalidate = 0
 
 export default async function DashboardPage() {
   const supabase = await createClient()
+  
+  // 1️⃣ VERIFICAR SESIÓN
+  const { data: { session } } = await supabase.auth.getSession()
+  
+  if (!session) {
+    redirect('/auth/login')
+  }
+  
+  // 2️⃣ OBTENER DATOS DEL USUARIO LOGUEADO
+  const { data: persona } = await supabase
+    .from('personas')
+    .select('*')
+    .eq('auth_id', session.user.id)
+    .single()
+  
+  if (!persona) {
+    // No encontró la persona → cerrar sesión y redirigir
+    await supabase.auth.signOut()
+    redirect('/auth/login')
+  }
+  
   const hoy = format(new Date(), 'yyyy-MM-dd')
   const diaSemana = format(new Date(), 'EEEE', { locale: es })
 
-  const [{ data: personas }, { data: asistenciasHoy }, { data: avisos }] = await Promise.all([
-    supabase.from('personas').select('*').eq('activo', true).order('nombre'),
+  // 3️⃣ Cargar datos según el rol
+  const [{ data: asistenciasHoy }, { data: avisos }] = await Promise.all([
     supabase.from('asistencias').select('*').eq('fecha', hoy),
     supabase.from('avisos').select('*').order('created_at', { ascending: false }).limit(5),
   ])
 
-  const total     = personas?.length ?? 0
+  // Si es coordinador, mostrar TODO el equipo
+  const esCoordinador = persona.rol === 'Coordinador'
+  
+  const [{ data: todosPersonas }] = esCoordinador ? await Promise.all([
+    supabase.from('personas').select('*').eq('activo', true).order('nombre'),
+  ]) : [{ data: [persona] }] // Si es practicante, solo él
+
+  const total     = todosPersonas?.length ?? 1
   const presentes = asistenciasHoy?.filter(a => ['presente','tarde'].includes(a.estado)).length ?? 0
   const ausentes  = total - presentes
 
   return (
     <div>
-      {/* Page header */}
+      {/* Header con info del usuario */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24 }}>
         <div>
           <h1 style={{ fontSize:20, fontWeight:700, color:'var(--azul)' }}>Dashboard</h1>
-          <p style={{ fontSize:12, color:'var(--txt3)', marginTop:2, textTransform:'capitalize' }}>
+          <p style={{ fontSize:12, color:'var(--txt3)', marginTop:2 }}>
+            {persona.nombre} · {getRolLabel(persona as any)}
+          </p>
+          <p style={{ fontSize:11, color:'var(--txt4)', marginTop:2, textTransform:'capitalize' }}>
             {format(new Date(), "EEEE d 'de' MMMM yyyy", { locale: es })}
           </p>
         </div>
-        <Link href="/dashboard/asistencia" className="btn btn-p" style={{ fontSize:12 }}>
-          ✅ Registrar asistencia
-        </Link>
+        <div style={{ display:'flex', gap:8 }}>
+          {esCoordinador && (
+            <Link href="/dashboard/asistencia" className="btn btn-p" style={{ fontSize:12 }}>
+              ✅ Registrar asistencia
+            </Link>
+          )}
+          <Link href="/auth/login" style={{ 
+            padding: '8px 16px', 
+            background: 'var(--rojo2)', 
+            color: 'white', 
+            borderRadius: 8, 
+            fontSize: 12,
+            textDecoration: 'none',
+            fontWeight: 600
+          }}>
+            Salir
+          </Link>
+        </div>
       </div>
 
       {/* Metrics */}
@@ -70,10 +117,10 @@ export default async function DashboardPage() {
           <div className="card-body">
             <div className="card-title">
               <span className="dot" style={{ background:'var(--azul)' }}></span>
-              Estado del equipo hoy
+              {esCoordinador ? 'Estado del equipo hoy' : 'Mi estado hoy'}
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:360, overflowY:'auto' }}>
-              {(personas ?? []).filter(p => p.grupo === 'ESAT').map(p => {
+              {(todosPersonas ?? [persona]).filter((p: any) => esCoordinador || p.id === persona.id).map((p: any) => {
                 const asist = asistenciasHoy?.find(a => a.persona_id === p.id)
                 const estado = asist?.estado ?? 'sin_registrar'
                 const colors: Record<string, string> = {
