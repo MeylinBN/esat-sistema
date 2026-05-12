@@ -17,12 +17,12 @@ export const revalidate = 0
 export default async function DashboardPage() {
   const supabase = await createClient()
   
-  // Verificar sesión (CORREGIDO:  { user })
+  // Verificar sesión
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  // Obtener datos de la persona (CORREGIDO:  persona)
-  const {  persona } = await supabase
+  // Obtener datos de la persona (CORREGIDO: data: persona)
+  const { data: persona } = await supabase
     .from('personas')
     .select('*')
     .eq('auth_id', user.id)
@@ -49,22 +49,22 @@ export default async function DashboardPage() {
   let avisos: any[] = []
 
   if (esCoordinador) {
-    const [{  personas }, {  asis }, {  avs }] = await Promise.all([
+    const [resPersonas, resAsis, resAvs] = await Promise.all([
       supabase.from('personas').select('*').eq('activo', true).order('nombre'),
       supabase.from('asistencias').select('*').eq('fecha', hoy),
       supabase.from('avisos').select('*').order('created_at', { ascending: false }).limit(5),
     ])
-    listaPersonas = personas || []
-    asistenciasHoy = asis || []
-    avisos = avs || []
+    listaPersonas = resPersonas.data || []
+    asistenciasHoy = resAsis.data || []
+    avisos = resAvs.data || []
   } else {
-    const [{ data: miAsistencia }, {  avs }] = await Promise.all([
+    const [resMiAsis, resAvs] = await Promise.all([
       supabase.from('asistencias').select('*').eq('fecha', hoy).eq('persona_id', persona.id),
       supabase.from('avisos').select('*').order('created_at', { ascending: false }).limit(5),
     ])
     listaPersonas = [persona]
-    asistenciasHoy = miAsistencia || []
-    avisos = avs || []
+    asistenciasHoy = resMiAsis.data || []
+    avisos = resAvs.data || []
   }
 
   const total = listaPersonas.length
