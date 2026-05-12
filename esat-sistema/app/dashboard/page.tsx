@@ -17,12 +17,12 @@ export const revalidate = 0
 export default async function DashboardPage() {
   const supabase = await createClient()
   
-  // 1. Verificar sesión
-  const {  { user } } = await supabase.auth.getUser()
+  // 1. Verificar sesión (CORREGIDO: data: { user })
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  // 2. Obtener datos de la persona
-  const {  persona } = await supabase
+  // 2. Obtener datos de la persona (CORREGIDO: data: persona)
+  const { data: persona } = await supabase
     .from('personas')
     .select('*')
     .eq('auth_id', user.id)
@@ -31,10 +31,10 @@ export default async function DashboardPage() {
   if (!persona) {
     return (
       <div style={{ padding: 40, textAlign: 'center' }}>
-        <h1>Error de configuración</h1>
+        <h1 style={{ color: 'red' }}>Error de configuración</h1>
         <p>No se encontró tu perfil.</p>
         <form action={handleSignOut}>
-          <button type="submit">Salir</button>
+          <button type="submit" style={{ marginTop: 20, padding: '10px 20px', background: 'red', color: 'white', border: 'none', cursor: 'pointer' }}>Salir</button>
         </form>
       </div>
     )
@@ -46,32 +46,30 @@ export default async function DashboardPage() {
   // CASO 1: VISTA DE MIEMBRO (Practicante, Asistente, etc.)
   // ==========================================
   if (!esCoordinador) {
-    // Fetch datos específicos del usuario para "Mi Panel"
     const hoy = format(new Date(), 'yyyy-MM-dd')
     
-    // Obtener asistencia de hoy
-    const {  asistenciaHoy } = await supabase
+    // Obtener asistencia de hoy (CORREGIDO: data: asistenciaHoy)
+    const { data: asistenciaHoy } = await supabase
       .from('asistencias')
       .select('*')
       .eq('fecha', hoy)
       .eq('persona_id', persona.id)
       .single()
 
-    // Obtener tareas pendientes
-    const {  tareasPendientes } = await supabase
+    // Obtener tareas pendientes (CORREGIDO: data: tareasPendientes)
+    const { data: tareasPendientes } = await supabase
       .from('tareas')
       .select('*')
       .eq('persona_id', persona.id)
-      .neq('estado', 'completado') // O 'pendiente', depende de tus estados
+      .neq('estado', 'completado')
       .limit(5)
 
-    // Calcular horas (simulado o real si tienes la tabla)
-    const horasAcum = 78 // Placeholder, ajusta si tienes lógica real
+    const horasAcum = 78 // Placeholder
 
     return (
       <div style={{ padding: '24px', fontFamily: 'sans-serif', background: '#f8fafc', minHeight: '100vh' }}>
         
-        {/* Header Mi Panel */}
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>
             <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: 0, color: '#1e293b' }}>Mi Panel</h1>
@@ -86,12 +84,11 @@ export default async function DashboardPage() {
           </form>
         </div>
 
-        {/* Tarjeta de Bienvenida y Stats */}
+        {/* Bienvenida */}
         <div style={{ background: 'white', padding: 20, borderRadius: 12, marginBottom: 24, border: '1px solid #e2e8f0' }}>
           <h2 style={{ margin: 0, fontSize: 20, color: '#0f172a' }}>Hola, {persona.nombre.split(' ')[0]} 👋</h2>
           <p style={{ margin: '4px 0 0', color: '#64748b' }}>Tu horario hoy: {persona.hora_ingreso || 'Flexible'}</p>
           
-          {/* Mini Stats */}
           <div style={{ display: 'flex', gap: 16, marginTop: 16 }}>
             <div style={{ flex: 1, background: '#f8fafc', padding: 10, borderRadius: 8, textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#2563eb' }}>{tareasPendientes?.length || 0}</div>
@@ -104,7 +101,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Sección de Asistencia */}
+        {/* Asistencia */}
         <div style={{ background: 'white', padding: 24, borderRadius: 12, marginBottom: 24, border: '1px solid #e2e8f0', textAlign: 'center' }}>
           <div style={{ fontSize: 24, fontWeight: 'bold', color: '#1e3a8a', marginBottom: 8 }}>
             {format(new Date(), 'HH:mm')}
@@ -112,15 +109,13 @@ export default async function DashboardPage() {
           <p style={{ color: '#64748b', marginBottom: 16 }}>Marca tu asistencia del día de hoy</p>
           
           <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginBottom: 16 }}>
-            {/* Botón Entrada */}
             <Link href="/dashboard/asistencia?accion=entrada" style={{
-              flex: 1, background: '#16a34a', color: 'white', padding: '16px', borderRadius: 12, textDecoration: 'none', fontWeight: 'bold'
+              flex: 1, background: '#16a34a', color: 'white', padding: '16px', borderRadius: 12, textDecoration: 'none', fontWeight: 'bold', display: 'block', textAlign: 'center'
             }}>
               ✅ Marcar Entrada
             </Link>
-            {/* Botón Salida */}
             <Link href="/dashboard/asistencia?accion=salida" style={{
-              flex: 1, background: '#dc2626', color: 'white', padding: '16px', borderRadius: 12, textDecoration: 'none', fontWeight: 'bold'
+              flex: 1, background: '#dc2626', color: 'white', padding: '16px', borderRadius: 12, textDecoration: 'none', fontWeight: 'bold', display: 'block', textAlign: 'center'
             }}>
               🚪 Marcar Salida
             </Link>
@@ -137,17 +132,17 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Sección de Permisos / Tareas */}
+        {/* Acciones Rápidas */}
         <div style={{ background: 'white', padding: 20, borderRadius: 12, border: '1px solid #e2e8f0' }}>
           <h3 style={{ margin: '0 0 16px 0', color: '#1e293b' }}>📋 Acciones Rápidas</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Link href="/dashboard/permisos" style={{
-              padding: 16, background: '#eff6ff', color: '#1e40af', borderRadius: 8, textDecoration: 'none', textAlign: 'center', fontWeight: 600
+              padding: 16, background: '#eff6ff', color: '#1e40af', borderRadius: 8, textDecoration: 'none', textAlign: 'center', fontWeight: 600, display: 'block'
             }}>
               📅 Solicitar Permiso
             </Link>
             <Link href="/dashboard/tareas" style={{
-              padding: 16, background: '#fefce8', color: '#854d0e', borderRadius: 8, textDecoration: 'none', textAlign: 'center', fontWeight: 600
+              padding: 16, background: '#fefce8', color: '#854d0e', borderRadius: 8, textDecoration: 'none', textAlign: 'center', fontWeight: 600, display: 'block'
             }}>
               📝 Mis Tareas
             </Link>
@@ -159,10 +154,9 @@ export default async function DashboardPage() {
   }
 
   // ==========================================
-  // CASO 2: VISTA DE COORDINADOR (Lo que ya teníamos)
+  // CASO 2: VISTA DE COORDINADOR
   // ==========================================
   
-  // Si es Coordinador, ejecuta la lógica original que ya funcionaba
   const hoy = format(new Date(), 'yyyy-MM-dd')
   let listaPersonas: any[] = []
   let asistenciasHoy: any[] = []
