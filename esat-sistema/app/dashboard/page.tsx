@@ -46,7 +46,7 @@ export default async function DashboardPage() {
   // CASO 1: VISTA DE MIEMBRO (Practicante, Asistente, etc.)
   // ==========================================
  if (!esCoordinador) {
-  redirect('/dashboard/panel2')
+  redirect('/panel2')
   }
     
 
