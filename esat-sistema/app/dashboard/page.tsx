@@ -4,7 +4,7 @@ import { es } from 'date-fns/locale'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
-// 1. SERVER ACTION para cerrar sesión correctamente
+// Server Action para cerrar sesión
 async function handleSignOut() {
   'use server'
   const supabase = await createClient()
@@ -17,11 +17,11 @@ export const revalidate = 0
 export default async function DashboardPage() {
   const supabase = await createClient()
   
-  // 2. Verificar sesión
-  const {  { user } } = await supabase.auth.getUser()
+  // Verificar sesión (CORREGIDO:  { user })
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  // 3. Obtener datos de la persona
+  // Obtener datos de la persona (CORREGIDO:  persona)
   const {  persona } = await supabase
     .from('personas')
     .select('*')
@@ -43,7 +43,7 @@ export default async function DashboardPage() {
   const hoy = format(new Date(), 'yyyy-MM-dd')
   const esCoordinador = persona.rol === 'Coordinador'
 
-  // 4. Cargar datos según rol
+  // Cargar datos según rol
   let listaPersonas: any[] = []
   let asistenciasHoy: any[] = []
   let avisos: any[] = []
@@ -58,7 +58,7 @@ export default async function DashboardPage() {
     asistenciasHoy = asis || []
     avisos = avs || []
   } else {
-    const [{  miAsistencia }, {  avs }] = await Promise.all([
+    const [{ data: miAsistencia }, {  avs }] = await Promise.all([
       supabase.from('asistencias').select('*').eq('fecha', hoy).eq('persona_id', persona.id),
       supabase.from('avisos').select('*').order('created_at', { ascending: false }).limit(5),
     ])
@@ -71,7 +71,7 @@ export default async function DashboardPage() {
   const presentes = asistenciasHoy.filter((a: any) => a.estado === 'presente' || a.estado === 'tarde').length
   const ausentes = total - presentes
 
-  // 5. Renderizar
+  // Renderizar
   return (
     <div style={{ padding: '24px', fontFamily: 'sans-serif', background: '#f8fafc', minHeight: '100vh' }}>
       
@@ -84,7 +84,7 @@ export default async function DashboardPage() {
           </p>
         </div>
         
-        {/* Botón de Logout REAL */}
+        {/* Botón de Logout */}
         <form action={handleSignOut}>
           <button type="submit" style={{ 
             background: '#ef4444', 
@@ -124,7 +124,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Lista de Personas / Mi Estado */}
+      {/* Lista */}
       <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
         <div style={{ padding: 16, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontWeight: 'bold', color: '#334155' }}>
           {esCoordinador ? '👥 Estado del Equipo' : '👤 Mi Estado Hoy'}
