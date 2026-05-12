@@ -17,12 +17,12 @@ export const revalidate = 0
 export default async function DashboardPage() {
   const supabase = await createClient()
   
-  // Verificar sesión
-  const { data: { user } } = await supabase.auth.getUser()
+  // 1. Verificar sesión
+  const {  { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  // Obtener datos de la persona (CORREGIDO: data: persona)
-  const { data: persona } = await supabase
+  // 2. Obtener datos de la persona
+  const {  persona } = await supabase
     .from('personas')
     .select('*')
     .eq('auth_id', user.id)
@@ -31,136 +31,200 @@ export default async function DashboardPage() {
   if (!persona) {
     return (
       <div style={{ padding: 40, textAlign: 'center' }}>
-        <h1 style={{ color: 'red' }}>Error de configuración</h1>
-        <p>Tu usuario existe pero no está vinculado a un perfil.</p>
+        <h1>Error de configuración</h1>
+        <p>No se encontró tu perfil.</p>
         <form action={handleSignOut}>
-          <button type="submit" style={{ marginTop: 20, padding: '10px 20px', background: 'red', color: 'white', border: 'none', cursor: 'pointer' }}>Salir</button>
+          <button type="submit">Salir</button>
         </form>
       </div>
     )
   }
 
-  const hoy = format(new Date(), 'yyyy-MM-dd')
   const esCoordinador = persona.rol === 'Coordinador'
 
-  // Cargar datos según rol
+  // ==========================================
+  // CASO 1: VISTA DE MIEMBRO (Practicante, Asistente, etc.)
+  // ==========================================
+  if (!esCoordinador) {
+    // Fetch datos específicos del usuario para "Mi Panel"
+    const hoy = format(new Date(), 'yyyy-MM-dd')
+    
+    // Obtener asistencia de hoy
+    const {  asistenciaHoy } = await supabase
+      .from('asistencias')
+      .select('*')
+      .eq('fecha', hoy)
+      .eq('persona_id', persona.id)
+      .single()
+
+    // Obtener tareas pendientes
+    const {  tareasPendientes } = await supabase
+      .from('tareas')
+      .select('*')
+      .eq('persona_id', persona.id)
+      .neq('estado', 'completado') // O 'pendiente', depende de tus estados
+      .limit(5)
+
+    // Calcular horas (simulado o real si tienes la tabla)
+    const horasAcum = 78 // Placeholder, ajusta si tienes lógica real
+
+    return (
+      <div style={{ padding: '24px', fontFamily: 'sans-serif', background: '#f8fafc', minHeight: '100vh' }}>
+        
+        {/* Header Mi Panel */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: 0, color: '#1e293b' }}>Mi Panel</h1>
+            <p style={{ color: '#64748b', margin: '4px 0 0' }}>
+              {format(new Date(), "EEEE d 'de' MMMM yyyy", { locale: es })}
+            </p>
+          </div>
+          <form action={handleSignOut}>
+            <button type="submit" style={{ background: '#ef4444', color: 'white', padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+              Salir
+            </button>
+          </form>
+        </div>
+
+        {/* Tarjeta de Bienvenida y Stats */}
+        <div style={{ background: 'white', padding: 20, borderRadius: 12, marginBottom: 24, border: '1px solid #e2e8f0' }}>
+          <h2 style={{ margin: 0, fontSize: 20, color: '#0f172a' }}>Hola, {persona.nombre.split(' ')[0]} 👋</h2>
+          <p style={{ margin: '4px 0 0', color: '#64748b' }}>Tu horario hoy: {persona.hora_ingreso || 'Flexible'}</p>
+          
+          {/* Mini Stats */}
+          <div style={{ display: 'flex', gap: 16, marginTop: 16 }}>
+            <div style={{ flex: 1, background: '#f8fafc', padding: 10, borderRadius: 8, textAlign: 'center' }}>
+              <div style={{ fontSize: 20, fontWeight: 'bold', color: '#2563eb' }}>{tareasPendientes?.length || 0}</div>
+              <div style={{ fontSize: 10, color: '#64748b' }}>TAREAS ACTIVAS</div>
+            </div>
+            <div style={{ flex: 1, background: '#f8fafc', padding: 10, borderRadius: 8, textAlign: 'center' }}>
+              <div style={{ fontSize: 20, fontWeight: 'bold', color: '#059669' }}>{horasAcum}h</div>
+              <div style={{ fontSize: 10, color: '#64748b' }}>HORAS ACUM.</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sección de Asistencia */}
+        <div style={{ background: 'white', padding: 24, borderRadius: 12, marginBottom: 24, border: '1px solid #e2e8f0', textAlign: 'center' }}>
+          <div style={{ fontSize: 24, fontWeight: 'bold', color: '#1e3a8a', marginBottom: 8 }}>
+            {format(new Date(), 'HH:mm')}
+          </div>
+          <p style={{ color: '#64748b', marginBottom: 16 }}>Marca tu asistencia del día de hoy</p>
+          
+          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginBottom: 16 }}>
+            {/* Botón Entrada */}
+            <Link href="/dashboard/asistencia?accion=entrada" style={{
+              flex: 1, background: '#16a34a', color: 'white', padding: '16px', borderRadius: 12, textDecoration: 'none', fontWeight: 'bold'
+            }}>
+              ✅ Marcar Entrada
+            </Link>
+            {/* Botón Salida */}
+            <Link href="/dashboard/asistencia?accion=salida" style={{
+              flex: 1, background: '#dc2626', color: 'white', padding: '16px', borderRadius: 12, textDecoration: 'none', fontWeight: 'bold'
+            }}>
+              🚪 Marcar Salida
+            </Link>
+          </div>
+
+          {asistenciaHoy ? (
+            <div style={{ background: '#dcfce7', color: '#166534', padding: 8, borderRadius: 8, fontSize: 12 }}>
+              ✅ Asistencia registrada — Entrada: {asistenciaHoy.hora_entrada?.slice(0,5)}
+            </div>
+          ) : (
+            <div style={{ background: '#f1f5f9', color: '#475569', padding: 8, borderRadius: 8, fontSize: 12 }}>
+              ⏳ Pendiente de registro
+            </div>
+          )}
+        </div>
+
+        {/* Sección de Permisos / Tareas */}
+        <div style={{ background: 'white', padding: 20, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+          <h3 style={{ margin: '0 0 16px 0', color: '#1e293b' }}>📋 Acciones Rápidas</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Link href="/dashboard/permisos" style={{
+              padding: 16, background: '#eff6ff', color: '#1e40af', borderRadius: 8, textDecoration: 'none', textAlign: 'center', fontWeight: 600
+            }}>
+              📅 Solicitar Permiso
+            </Link>
+            <Link href="/dashboard/tareas" style={{
+              padding: 16, background: '#fefce8', color: '#854d0e', borderRadius: 8, textDecoration: 'none', textAlign: 'center', fontWeight: 600
+            }}>
+              📝 Mis Tareas
+            </Link>
+          </div>
+        </div>
+
+      </div>
+    )
+  }
+
+  // ==========================================
+  // CASO 2: VISTA DE COORDINADOR (Lo que ya teníamos)
+  // ==========================================
+  
+  // Si es Coordinador, ejecuta la lógica original que ya funcionaba
+  const hoy = format(new Date(), 'yyyy-MM-dd')
   let listaPersonas: any[] = []
   let asistenciasHoy: any[] = []
   let avisos: any[] = []
 
-  if (esCoordinador) {
-    const [resPersonas, resAsis, resAvs] = await Promise.all([
-      supabase.from('personas').select('*').eq('activo', true).order('nombre'),
-      supabase.from('asistencias').select('*').eq('fecha', hoy),
-      supabase.from('avisos').select('*').order('created_at', { ascending: false }).limit(5),
-    ])
-    listaPersonas = resPersonas.data || []
-    asistenciasHoy = resAsis.data || []
-    avisos = resAvs.data || []
-  } else {
-    const [resMiAsis, resAvs] = await Promise.all([
-      supabase.from('asistencias').select('*').eq('fecha', hoy).eq('persona_id', persona.id),
-      supabase.from('avisos').select('*').order('created_at', { ascending: false }).limit(5),
-    ])
-    listaPersonas = [persona]
-    asistenciasHoy = resMiAsis.data || []
-    avisos = resAvs.data || []
-  }
+  const [resPersonas, resAsis, resAvs] = await Promise.all([
+    supabase.from('personas').select('*').eq('activo', true).order('nombre'),
+    supabase.from('asistencias').select('*').eq('fecha', hoy),
+    supabase.from('avisos').select('*').order('created_at', { ascending: false }).limit(5),
+  ])
+  listaPersonas = resPersonas.data || []
+  asistenciasHoy = resAsis.data || []
+  avisos = resAvs.data || []
 
   const total = listaPersonas.length
   const presentes = asistenciasHoy.filter((a: any) => a.estado === 'presente' || a.estado === 'tarde').length
   const ausentes = total - presentes
 
-  // Renderizar
   return (
     <div style={{ padding: '24px', fontFamily: 'sans-serif', background: '#f8fafc', minHeight: '100vh' }}>
-      
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: 0, color: '#1e293b' }}>Dashboard</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: 0, color: '#1e293b' }}>Dashboard General</h1>
           <p style={{ color: '#64748b', margin: '4px 0 0' }}>
             {format(new Date(), "EEEE d 'de' MMMM yyyy", { locale: es })}
           </p>
         </div>
-        
-        {/* Botón de Logout */}
         <form action={handleSignOut}>
-          <button type="submit" style={{ 
-            background: '#ef4444', 
-            color: 'white', 
-            padding: '8px 16px', 
-            borderRadius: 8, 
-            border: 'none', 
-            cursor: 'pointer',
-            fontWeight: 'bold'
-          }}>
-            Cerrar sesión
-          </button>
+          <button type="submit" style={{ background: '#ef4444', color: 'white', padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Cerrar Sesión</button>
         </form>
       </div>
 
-      {/* Bienvenida */}
-      <div style={{ background: 'white', padding: 20, borderRadius: 12, marginBottom: 24, border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-        <h2 style={{ margin: 0, fontSize: 20, color: '#0f172a' }}>Hola, {persona.nombre.split(' ')[0]} 👋</h2>
-        <p style={{ margin: '8px 0 0', color: '#64748b' }}>
-          {esCoordinador ? 'Tienes acceso total a la gestión del equipo.' : `Tu horario de hoy: ${persona.hora_ingreso || 'Flexible'}`}
-        </p>
-      </div>
-
-      {/* Métricas */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16, marginBottom: 24 }}>
-        <div style={{ background: 'white', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 'bold', marginBottom: 4 }}>TOTAL</div>
-          <div style={{ fontSize: 24, fontWeight: 'bold', color: '#0f172a' }}>{total}</div>
+        <div style={{ background: 'white', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 'bold' }}>TOTAL</div>
+          <div style={{ fontSize: 24, fontWeight: 'bold' }}>{total}</div>
         </div>
-        <div style={{ background: 'white', padding: 16, borderRadius: 12, border: '1px solid #bbf7d0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 'bold', marginBottom: 4 }}>PRESENTES</div>
+        <div style={{ background: 'white', padding: 16, borderRadius: 12, border: '1px solid #bbf7d0' }}>
+          <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 'bold' }}>PRESENTES</div>
           <div style={{ fontSize: 24, fontWeight: 'bold', color: '#16a34a' }}>{presentes}</div>
         </div>
-        <div style={{ background: 'white', padding: 16, borderRadius: 12, border: '1px solid #fecaca', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: 12, color: '#dc2626', fontWeight: 'bold', marginBottom: 4 }}>AUSENTES</div>
+        <div style={{ background: 'white', padding: 16, borderRadius: 12, border: '1px solid #fecaca' }}>
+          <div style={{ fontSize: 12, color: '#dc2626', fontWeight: 'bold' }}>AUSENTES</div>
           <div style={{ fontSize: 24, fontWeight: 'bold', color: '#dc2626' }}>{ausentes}</div>
         </div>
       </div>
 
-      {/* Lista */}
-      <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-        <div style={{ padding: 16, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontWeight: 'bold', color: '#334155' }}>
-          {esCoordinador ? '👥 Estado del Equipo' : '👤 Mi Estado Hoy'}
-        </div>
-        
+      <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+        <div style={{ padding: 16, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontWeight: 'bold' }}>👥 Estado del Equipo</div>
         <div>
           {listaPersonas.map((p: any) => {
             const asist = asistenciasHoy.find((a: any) => a.persona_id === p.id)
             const estado = asist?.estado || 'Sin registrar'
-            
-            let colorFondo = '#f1f5f9'
-            let colorTexto = '#64748b'
-            if (estado === 'presente') { colorFondo = '#dcfce7'; colorTexto = '#166534' }
-            if (estado === 'tarde') { colorFondo = '#fef3c7'; colorTexto = '#92400e' }
-            if (estado === 'ausente') { colorFondo = '#fee2e2'; colorTexto = '#991b1b' }
-
             return (
-              <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', borderBottom: '1px solid #f1f5f9' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: p.color || '#cbd5e1', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 16 }}>
-                    {p.nombre.charAt(0)}
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 600, color: '#0f172a' }}>{p.nombre}</div>
-                    <div style={{ fontSize: 12, color: '#94a3b8' }}>{p.rol} - {p.dni}</div>
-                  </div>
-                </div>
-                <span style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: colorFondo, color: colorTexto }}>
-                  {estado === 'Sin registrar' ? '⏳ Pendiente' : estado}
-                </span>
+              <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #f1f5f9' }}>
+                <span>{p.nombre}</span>
+                <span style={{ color: estado === 'presente' ? 'green' : 'gray' }}>{estado}</span>
               </div>
             )
           })}
         </div>
       </div>
-
     </div>
   )
 }
