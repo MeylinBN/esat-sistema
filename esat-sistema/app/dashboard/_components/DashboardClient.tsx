@@ -30,11 +30,7 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
     const viernes = format(addDays(startOfWeek(new Date(),{weekStartsOn:1}),4),'yyyy-MM-dd')
     
     const [p,ah,as,av,t,avs] = await Promise.all([
-      // ✅ CORREGIDO: Filtrar por rol, no por grupo
-      supabase.from('personas').select('*')
-        .eq('activo',true)
-        .neq('rol','Coordinador') // Excluir coordinadores de la lista
-        .order('nombre'),
+      supabase.from('personas').select('*').eq('activo',true).neq('rol','Coordinador').order('nombre'),
       supabase.from('asistencias').select('*').eq('fecha',hoy),
       supabase.from('asistencias').select('*').gte('fecha',lunes).lte('fecha',viernes),
       supabase.from('avisos').select('*').order('created_at',{ascending:false}).limit(5),
@@ -50,7 +46,7 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
     setLoading(false)
   }
 
-  // ✅ CORREGIDO: Filtrar solo ESAT (excluir EcoBIOTEM)
+  // Filtro ESAT (excluir EcoBIOTEM y Coordinadores)
   const esat = (personas??[]).filter(p=>p.rol!=='EcoBIOTEM' && p.rol!=='Coordinador')
   const presentes = asistHoy.filter(a=>['presente','tarde'].includes(a.estado)).length
   const tardanzas = asistHoy.filter(a=>a.estado==='tarde').length
@@ -76,6 +72,9 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
   })
   const maxBar = Math.max(...datosSemana.map(d=>d.total),1)
 
+  // Contar roles únicos sin usar Set
+  const rolesUnicos = esat.map(p => p.rol).filter((v, i, a) => a.indexOf(v) === i);
+
   const AVISO_CFG: Record<string,{bg:string,txt:string,border:string}> = {
     permiso:     {bg:'#f3e8ff',txt:'#7c3aed',border:'#7c3aed'},
     anuncio:     {bg:'#dcfce7',txt:'#15803d',border:'#15803d'},
@@ -88,7 +87,7 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
 
   return (
     <div>
-      {/* Header con nombre del coordinador */}
+      {/* Header */}
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
         <div>
           <h1 style={{fontSize:24,fontWeight:700,color:'#0f172a'}}>Dashboard</h1>
@@ -114,31 +113,129 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
       {/* Métricas */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14,marginBottom:20}}>
         {[
-         // Calcular roles únicos sin usar Set (para compatibilidad con TS)
-const rolesUnicos = esat.map(p => p.rol).filter((v, i, a) => a.indexOf(v) === i);
+          {l:'Personal activo',v:esat.length,s:`En ${rolesUnicos.length} categorías`,i:'👥',c:'#002F6C'},
+          {l:'Presentes hoy',v:presentes,s:`de ${esat.length} esperados`,i:'✅',c:'#15803d'},
+          {l:'Tardanzas mes',v:tardanzas,s:'+1 vs. mes anterior',i:'',c:'#dc2626'},
+          {l:'Avance promedio',v:`${avancePromedio}%`,s:'Semana actual',i:'',c:'#b45309'},
+        ].map(m=>(
+          <div key={m.l} style={{background:'white',borderRadius:12,padding:'16px 18px',border:'1.5px solid #e2e8f0',boxShadow:'0 1px 3px rgba(0,0,0,.06)',position:'relative',overflow:'hidden'}}>
+            <div style={{fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>{m.l}</div>
+            <div style={{fontSize:30,fontWeight:700,color:m.c,lineHeight:1}}>{m.v}</div>
+            <div style={{fontSize:11,color:'#94a3b8',marginTop:4}}>{m.s}</div>
+            <div style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:28,opacity:.15}}>{m.i}</div>
+          </div>
+        ))}
+      </div>
 
-<div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14,marginBottom:20}}>
-  {[
-    {l:'Personal activo',v:esat.length,s:`En ${rolesUnicos.length} categorías`,i:'👥',c:'#002F6C'},
-    {l:'Presentes hoy',v:presentes,s:`de ${esat.length} esperados`,i:'✅',c:'#15803d'},
-    {l:'Tardanzas mes',v:tardanzas,s:'+1 vs. mes anterior',i:'⏰',c:'#dc2626'},
-    {l:'Avance promedio',v:`${avancePromedio}%`,s:'Semana actual',i:'📝',c:'#b45309'},
-  ].map(m=>(
-    <div key={m.l} style={{background:'white',borderRadius:12,padding:'16px 18px',border:'1.5px solid #e2e8f0',boxShadow:'0 1px 3px rgba(0,0,0,.06)',position:'relative',overflow:'hidden'}}>
-      <div style={{fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>{m.l}</div>
-      <div style={{fontSize:30,fontWeight:700,color:m.c,lineHeight:1}}>{m.v}</div>
-      <div style={{fontSize:11,color:'#94a3b8',marginTop:4}}>{m.s}</div>
-      <div style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:28,opacity:.15}}>{m.i}</div>
-    </div>
-  ))}
-</div>
+      {/* Gráficas */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
+        {/* Gráfica asistencia semanal */}
+        <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+          <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:16,display:'flex',alignItems:'center',gap:8}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:'#002F6C'}}/>
+            Asistencia semanal
+          </div>
+          <div style={{display:'flex',alignItems:'flex-end',gap:8,height:180,padding:'0 8px'}}>
+            {datosSemana.map((d,i)=>(
+              <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4,height:'100%',justifyContent:'flex-end'}}>
+                <div style={{width:'100%',display:'flex',flexDirection:'column',borderRadius:'6px 6px 0 0',overflow:'hidden',height:`${Math.round(d.total/maxBar*160)}px`,minHeight:d.total>0?4:0}}>
+                  <div style={{background:'#002F6C',flex:d.practica,minHeight:d.practica>0?2:0}}/>
+                  <div style={{background:'#c9a227',flex:d.senati,minHeight:d.senati>0?2:0}}/>
+                  <div style={{background:'#15803d',flex:d.volunt,minHeight:d.volunt>0?2:0}}/>
+                </div>
+                <span style={{fontSize:11,color:'#94a3b8',fontWeight:500}}>{DIAS_LABEL[i]}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{display:'flex',gap:14,marginTop:12,flexWrap:'wrap'}}>
+            {[['#002F6C','Practicante'],['#c9a227','SENATI'],['#15803d','Voluntario'],['#7c3aed','EcoBIOTEM']].map(([c,l])=>(
+              <div key={l} style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'#475569'}}>
+                <div style={{width:10,height:10,borderRadius:2,background:c as string}}/>
+                {l}
+              </div>
+            ))}
+          </div>
+        </div>
 
-      {/* ... el resto del JSX de Claude se mantiene igual ... */}
-      {/* (Te lo doy completo en el siguiente mensaje para no saturar) */}
-      
-      <div style={{padding:20,background:'#f8fafc',borderRadius:12,textAlign:'center',color:'#64748b'}}>
-        <em>Contenido del dashboard cargado correctamente</em><br/>
-        <small>Próximamente: gráficas y tablas completas</small>
+        {/* Avance por área */}
+        <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+          <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:16,display:'flex',alignItems:'center',gap:8}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:'#d97706'}}/>
+            Avance por área
+          </div>
+          {(['Ambiental','Sistemas','Técnico','General'] as string[]).map(area=>{
+            const pArea=esat.filter(p=>p.area===area)
+            if(!pArea.length) return null
+            const tArea=tareas.filter(t=>pArea.some(p=>p.id===t.persona_id)&&t.estado==='en_progreso')
+            const prom=tArea.length===0?0:Math.round(tArea.reduce((acc,t)=>{
+              const ua=avances.filter(a=>a.tarea_id===t.id).sort((a:any,b:any)=>b.semana.localeCompare(a.semana))[0]
+              return acc+(ua?.porcentaje??0)
+            },0)/tArea.length)
+            return (
+              <div key={area} style={{marginBottom:14}}>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:5}}>
+                  <span style={{fontWeight:500,color:'#475569'}}>{area}</span>
+                  <span style={{fontWeight:600,color:'#002F6C'}}>{prom}%</span>
+                </div>
+                <div style={{height:8,background:'#f1f5f9',borderRadius:10,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${prom}%`,background:'#002F6C',borderRadius:10,transition:'width .4s'}}/>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Estado del equipo y Avisos */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+        {/* Estado del equipo */}
+        <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+          <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:14,display:'flex',alignItems:'center',gap:8}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:'#15803d'}}/>
+            Estado del equipo hoy
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:380,overflowY:'auto'}}>
+            {esat.map(p=>{
+              const a=asistHoy.find(x=>x.persona_id===p.id)
+              const COLOR: Record<string,string>={presente:'#15803d',tarde:'#d97706',ausente:'#dc2626',permiso:'#7c3aed',sin_registrar:'#94a3b8'}
+              const estado=a?.estado??'sin_registrar'
+              return (
+                <div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:9,background:'#f8fafc',border:'1px solid #e2e8f0'}}>
+                  <div style={{width:32,height:32,borderRadius:'50%',background:p.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'white',flexShrink:0}}>{p.nombre.charAt(0)}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.nombre}</div>
+                    <div style={{fontSize:10,color:'#94a3b8'}}>{p.rol==='Practicante'?`Practicante UNASAM · ${p.subrol||''}`:p.rol==='SENATI'?`Practicante SENATI · ${p.subrol||''}`:p.rol} · {p.area||''}</div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <div style={{width:8,height:8,borderRadius:'50%',background:COLOR[estado]??'#94a3b8'}}/>
+                    <span style={{fontSize:11,color:COLOR[estado]??'#94a3b8',fontWeight:500}}>{a?.hora_entrada?.slice(0,5)??'—'}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Avisos recientes */}
+        <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+          <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <span style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:8,height:8,borderRadius:'50%',background:'#dc2626'}}/>Avisos recientes</span>
+            <a href="/dashboard/avisos" style={{fontSize:11,color:'#002F6C',textDecoration:'none',fontWeight:500}}>Ver todos →</a>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {avisos.map(a=>{
+              const cfg=AVISO_CFG[a.tipo]??AVISO_CFG.anuncio
+              return (
+                <div key={a.id} style={{padding:'10px 14px',background:'white',borderRadius:9,border:'1px solid #e2e8f0',borderLeft:`3px solid ${cfg.border}`}}>
+                  <div style={{fontSize:9,fontWeight:700,letterSpacing:'.08em',textTransform:'uppercase',color:cfg.txt,marginBottom:4}}>{a.tipo}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:'#0f172a',marginBottom:2}}>{a.titulo}</div>
+                  {a.fecha_evento&&<div style={{fontSize:10,color:'#94a3b8'}}>{a.fecha_evento} · Coord. Logístico</div>}
+                </div>
+              )
+            })}
+            {!avisos.length&&<p style={{fontSize:13,color:'#94a3b8',textAlign:'center',padding:'16px 0'}}>Sin avisos recientes</p>}
+          </div>
+        </div>
       </div>
     </div>
   )
