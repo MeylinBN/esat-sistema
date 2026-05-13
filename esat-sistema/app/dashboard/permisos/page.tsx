@@ -24,8 +24,19 @@ export default function PermisosPage() {
   const [permisos, setPermisos] = useState<any[]>([])
   const [personas, setPersonas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string|null>(null)
+  const [modal, setModal] = useState(false)
   const [filtro, setFiltro] = useState('todos')
+  
+  // Estados del formulario
+  const [mPerId, setMPerId] = useState('')
+  const [mTipo, setMTipo] = useState('permiso_personal')
+  const [mFI, setMFI] = useState('')
+  const [mFF, setMFF] = useState('')
+  const [mMotivo, setMMotivo] = useState('')
+  const [mEstado, setMEstado] = useState('pendiente')
+  const [mRecup, setMRecup] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string|null>(null)
 
   useEffect(()=>{
     load()
@@ -34,37 +45,21 @@ export default function PermisosPage() {
   async function load(){
     try {
       setError(null)
-      console.log('🔄 Cargando permisos...')
       
-      // Cargar personas primero
-      const { data: personasData, error: errorPersonas } = await supabase
+      // Cargar personas
+      const {  personasData } = await supabase
         .from('personas')
         .select('id,nombre,color')
         .eq('activo', true)
         .order('nombre')
       
-      if(errorPersonas) {
-        console.error('❌ Error cargando personas:', errorPersonas)
-        setError('Error cargando personas')
-        return
-      }
-      
       setPersonas(personasData ?? [])
-      console.log('✅ Personas cargadas:', personasData?.length)
 
-      // Cargar permisos SIN JOIN (lo haremos manualmente)
-      const { data: permisosData, error: errorPermisos } = await supabase
+      // Cargar permisos
+      const {  permisosData } = await supabase
         .from('permisos')
         .select('*')
         .order('created_at', { ascending: false })
-      
-      if(errorPermisos) {
-        console.error('❌ Error cargando permisos:', errorPermisos)
-        setError('Error cargando permisos: ' + errorPermisos.message)
-        return
-      }
-      
-      console.log('✅ Permisos cargados:', permisosData?.length)
       
       // Unir manualmente con personas
       const permisosConPersonas = (permisosData ?? []).map(perm => {
@@ -76,46 +71,104 @@ export default function PermisosPage() {
         }
       })
       
-      console.log('📊 Permisos con personas:', permisosConPersonas)
       setPermisos(permisosConPersonas)
       
     } catch(err) {
-      console.error('❌ Error inesperado:', err)
-      setError('Error inesperado: ' + (err as Error).message)
+      console.error('Error:', err)
+      setError('Error cargando datos')
     } finally {
       setLoading(false)
     }
   }
 
+  async function guardarPermiso(){
+    // Validaciones estrictas
+    if(!mPerId){
+      setError('Selecciona una persona')
+      return
+    }
+    if(!mFI || !mFF){
+      setError('Selecciona fecha de inicio y fin')
+      return
+    }
+    if(new Date(mFI) > new Date(mFF)){
+      setError('La fecha de inicio no puede ser mayor a la fecha fin')
+      return
+    }
+    if(!mMotivo.trim()){
+      setError('Ingresa un motivo para el permiso')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    
+    try {
+      const data = {
+        persona_id: mPerId,
+        tipo: mTipo,
+        fecha_inicio: mFI,
+        fecha_fin: mFF,
+        motivo: mMotivo.trim(),
+        estado: mEstado,
+        dias_recuperacion: mRecup.trim() || null,
+        created_at: new Date().toISOString(),
+      }
+
+      const { error } = await supabase
+        .from('permisos')
+        .insert(data)
+      
+      if(error) {
+        console.error('Error insertando:', error)
+        setError('Error al guardar: ' + error.message)
+      } else {
+        console.log('✅ Permiso registrado correctamente')
+        cerrarModal()
+        load()
+      }
+    } catch(err) {
+      setError('Error inesperado al guardar')
+      console.error(err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function cerrarModal(){
+    setModal(false)
+    setMPerId('')
+    setMFI('')
+    setMFF('')
+    setMMotivo('')
+    setMEstado('pendiente')
+    setMRecup('')
+    setError(null)
+  }
+
   async function cambiarEstado(id:string, estado:string){
-    console.log(`🔄 Cambiando estado de ${id} a ${estado}`)
     const { error } = await supabase
       .from('permisos')
       .update({ estado })
       .eq('id', id)
     
     if(error) {
-      console.error('❌ Error actualizando:', error)
       alert('Error al actualizar: ' + error.message)
     } else {
-      console.log('✅ Estado actualizado')
       load()
     }
   }
 
   async function eliminar(id:string){
     if(!confirm('¿Eliminar este permiso?')) return
-    console.log(`🗑 Eliminando permiso ${id}`)
     const { error } = await supabase
       .from('permisos')
       .delete()
       .eq('id', id)
     
     if(error) {
-      console.error('❌ Error eliminando:', error)
       alert('Error al eliminar: ' + error.message)
     } else {
-      console.log('✅ Permiso eliminado')
       load()
     }
   }
@@ -131,44 +184,42 @@ export default function PermisosPage() {
 
   return (
     <div>
+      {/* Header con botón Registrar */}
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:22}}>
         <div>
           <h1 style={{fontFamily:'Lora,serif',fontSize:24,color:'#002F6C',fontWeight:600}}>Permisos y Faltas</h1>
           <p style={{fontSize:12,color:'#475569',marginTop:3}}>Registro y aprobación de ausencias justificadas</p>
         </div>
-        <button onClick={load} 
-          style={{background:'#002F6C',color:'white',padding:'10px 20px',borderRadius:9,border:'none',cursor:'pointer',fontWeight:600}}>
-          🔄 Recargar
+        <button onClick={()=>setModal(true)} 
+          style={{background:'#002F6C',color:'white',padding:'10px 20px',borderRadius:9,border:'none',cursor:'pointer',fontWeight:600,fontSize:13}}>
+          + Registrar permiso
         </button>
       </div>
 
-      {error && (
-        <div style={{background:'#fee2e2',border:'1.5px solid #fca5a5',borderRadius:10,padding:'12px 16px',marginBottom:20,color:'#b91c1c'}}>
-          ⚠️ {error}
-        </div>
-      )}
-
+      {/* Alerta de pendientes */}
       {pendientes>0 && (
         <div style={{background:'#fef3c7',border:'1.5px solid #fde68a',borderRadius:10,padding:'12px 16px',marginBottom:20}}>
           ⏳ {pendientes} permiso(s) pendiente(s)
         </div>
       )}
 
+      {/* Métricas */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14,marginBottom:20}}>
         <div style={{background:'white',borderRadius:12,padding:'16px',border:'1.5px solid #e2e8f0'}}>
-          <div style={{fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase'}}>Total registros</div>
+          <div style={{fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',marginBottom:6}}>Total registros</div>
           <div style={{fontSize:28,fontWeight:700,color:'#002F6C'}}>{permisos.length}</div>
         </div>
         <div style={{background:'white',borderRadius:12,padding:'16px',border:'1.5px solid #e2e8f0'}}>
-          <div style={{fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase'}}>Aprobados</div>
+          <div style={{fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',marginBottom:6}}>Aprobados</div>
           <div style={{fontSize:28,fontWeight:700,color:'#15803d'}}>{aprobados}</div>
         </div>
         <div style={{background:'white',borderRadius:12,padding:'16px',border:'1.5px solid #e2e8f0'}}>
-          <div style={{fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase'}}>Pendientes</div>
+          <div style={{fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',marginBottom:6}}>Pendientes</div>
           <div style={{fontSize:28,fontWeight:700,color:'#b45309'}}>{pendientes}</div>
         </div>
       </div>
 
+      {/* Filtros */}
       <div style={{display:'flex',gap:4,marginBottom:16}}>
         {['todos','pendiente','aprobado','rechazado'].map(f=>(
           <button key={f} onClick={()=>setFiltro(f)}
@@ -179,6 +230,7 @@ export default function PermisosPage() {
         ))}
       </div>
 
+      {/* Lista de permisos */}
       <div style={{display:'flex',flexDirection:'column',gap:10}}>
         {permisosFiltrados.map(p=>{
           const ec = ESTADO_CFG[p.estado]??ESTADO_CFG.pendiente
@@ -202,7 +254,10 @@ export default function PermisosPage() {
                     📅 {format(new Date(p.fecha_inicio+'T12:00:00'),"d MMM yyyy",{locale:es})}
                     {p.fecha_fin!==p.fecha_inicio && ` → ${format(new Date(p.fecha_fin+'T12:00:00'),"d MMM yyyy",{locale:es})}`}
                   </div>
-                  {p.motivo && <div style={{fontSize:12,color:'#475569'}}>"{p.motivo}"</div>}
+                  {p.motivo && <div style={{fontSize:12,color:'#475569',marginBottom:4}}>"{p.motivo}"</div>}
+                  {p.dias_recuperacion && (
+                    <div style={{fontSize:11,color:'#15803d',fontWeight:500}}>🔁 Recuperación: {p.dias_recuperacion}</div>
+                  )}
                 </div>
                 <div style={{display:'flex',gap:6}}>
                   {p.estado==='pendiente' && (
@@ -232,6 +287,92 @@ export default function PermisosPage() {
           </div>
         )}
       </div>
+
+      {/* Modal para registrar permiso */}
+      {modal && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}
+          onClick={e=>{if(e.target===e.currentTarget)setModal(false)}}>
+          <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:500,boxShadow:'0 24px 80px rgba(0,0,0,.25)'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+              <h3 style={{fontSize:16,fontWeight:700}}>Registrar permiso / falta</h3>
+              <button onClick={cerrarModal} style={{width:28,height:28,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+            </div>
+            
+            {error && (
+              <div style={{background:'#fee2e2',border:'1px solid #fca5a5',borderRadius:8,padding:'10px 14px',marginBottom:16,color:'#b91c1c',fontSize:13}}>
+                ⚠️ {error}
+              </div>
+            )}
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+              <div>
+                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Persona *</label>
+                <select value={mPerId} onChange={e=>setMPerId(e.target.value)} 
+                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
+                  <option value="">Seleccionar...</option>
+                  {personas.map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Tipo *</label>
+                <select value={mTipo} onChange={e=>setMTipo(e.target.value)}
+                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
+                  {Object.entries(TIPO_LABEL).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+            </div>
+            
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+              <div>
+                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Fecha inicio *</label>
+                <input type="date" value={mFI} onChange={e=>setMFI(e.target.value)}
+                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+              </div>
+              <div>
+                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Fecha fin *</label>
+                <input type="date" value={mFF} onChange={e=>setMFF(e.target.value)}
+                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+              </div>
+            </div>
+            
+            <div style={{marginBottom:12}}>
+              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Motivo *</label>
+              <textarea value={mMotivo} onChange={e=>setMMotivo(e.target.value)} rows={3} 
+                placeholder="Explica el motivo del permiso o falta..."
+                style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13,resize:'vertical'}}/>
+            </div>
+            
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+              <div>
+                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Estado</label>
+                <select value={mEstado} onChange={e=>setMEstado(e.target.value)}
+                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
+                  <option value="pendiente">Pendiente</option>
+                  <option value="aprobado">Aprobado</option>
+                  <option value="rechazado">Rechazado</option>
+                </select>
+              </div>
+              <div>
+                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Días recuperación</label>
+                <input value={mRecup} onChange={e=>setMRecup(e.target.value)} 
+                  placeholder="Opcional: Ej: martes 28/04"
+                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+              </div>
+            </div>
+            
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <button onClick={cerrarModal} 
+                style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>
+                Cancelar
+              </button>
+              <button onClick={guardarPermiso} disabled={saving}
+                style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:saving?.6:1}}>
+                {saving?'Guardando...':'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
