@@ -44,7 +44,10 @@ export default function AvanceSemanalPage() {
   }
 
   // Obtener semanas únicas y tomar las últimas 4
-  const semanasExistentes = [...new Set(avances.map(a=>a.semana))].sort((a,b)=>b.localeCompare(a))
+  const semanasExistentes = avances
+  .map(a => a.semana)
+  .filter((v, i, a) => a.indexOf(v) === i)
+  .sort((a, b) => b.localeCompare(a))
   const ultimas4 = semanasExistentes.slice(0, SEMANAS_RECIENTES)
 
   function avTarea(tid:string, sem:string){ 
