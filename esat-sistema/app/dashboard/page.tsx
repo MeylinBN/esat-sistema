@@ -11,7 +11,7 @@ export default async function DashboardPage() {
 
   const { data: perfil } = await supabase
     .from('personas')
-    .select('rol, subrol, nombre') 
+    .select('rol, subrol, nombre, dni') 
     .eq('auth_id', user.id)
     .single()
 
@@ -20,28 +20,16 @@ export default async function DashboardPage() {
     redirect('/auth/login')
   }
 
-  // Redirigir según rol (lógica mejorada)
-  if (perfil.rol === 'Coordinador') {
-    // Normalizar texto para comparar sin tildes ni mayúsculas
-    const subrolNormalizado = (perfil.subrol || '').toLowerCase()
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Quita tildes
-    
-    // Si es logístico (en rol o subrol)
-    if (subrolNormalizado.includes('logistico') || perfil.rol?.toLowerCase().includes('logistico')) {
-      redirect('/dashboard/logisticos')
-    }
-    // Si es general, se queda en /dashboard
-  } else {
-    // Todos los demás → panel2
-    redirect('/panel2')
+  // Debug: ver qué valores tiene
+  const subrolLimpio = (perfil.subrol || '').trim().toLowerCase()
+  const dni = perfil.dni
+  
+  // Lógica específica para Francisco (DNI: 70189681)
+  if (dni === '70189681' || dni === '72121099' || dni === '77678583' || dni === '72728855' || dni === '32646306') {
+    // Coordinadores Logísticos por DNI
+    redirect('/dashboard/logisticos')
   }
 
-  // Dashboard para Coordinador General
-  return (
-    <div style={{ padding: 40, fontFamily: 'sans-serif' }}>
-      <h1>👋 Dashboard General</h1>
-      <p>Bienvenido, {perfil.nombre}</p>
-      <p style={{ color: 'gray' }}><em>Próximamente: métricas y estado del equipo</em></p>
-    </div>
-  )
-}
+  // Lógica por subrol
+  if (perfil.rol === 'Coordinador') {
+    if
