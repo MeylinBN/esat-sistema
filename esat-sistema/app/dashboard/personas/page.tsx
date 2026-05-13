@@ -6,23 +6,6 @@ const ROLES = ['Practicante','Tesista','Voluntario','Investigador','Asistente','
 const DIAS = ['L','M','X','J','V']
 const DIAS_LABEL: Record<string,string> = {L:'Lunes',M:'Martes',X:'Miércoles',J:'Jueves',V:'Viernes'}
 
-const AREAS = [
-  'Ing. Sistemas',
-  'Ing. Ambiental',
-  'Comunicaciones',
-  'Derecho',
-  'Administración',
-  'Recursos Humanos',
-  'General'
-]
-
-const ORIGENES = [
-  'UNASAM',
-  'SENATI',
-  'UCV',
-  'EXTERNO'
-]
-
 const GRUPOS_CONFIG = [
   {rol:'Coordinador', label:'⭐ Coordinadores',      color:'#c9a227'},
   {rol:'Practicante', label:'🎓 Practicantes UNASAM', color:'#1e40af'},
@@ -36,6 +19,8 @@ export default function PersonasPage() {
   const supabase = createClient()
   const [personas,  setPersonas]  = useState<any[]>([])
   const [horarios,  setHorarios]  = useState<any[]>([])
+  const [areas,     setAreas]     = useState<string[]>([])
+  const [origenes,  setOrigenes]  = useState<string[]>([])
   const [loading,   setLoading]   = useState(true)
   const [buscar,    setBuscar]    = useState('')
   const [modal,     setModal]     = useState(false)
@@ -51,16 +36,18 @@ export default function PersonasPage() {
   const [mGrupo,    setMGrupo]    = useState('ESAT')
   const [mArea,     setMArea]     = useState('Ing. Sistemas')
   const [mColor,    setMColor]    = useState('#1e40af')
-  const [mHsSem,    setMHsSem]    = useState('')
   
-  // Horarios por día (estructura: {L: [{entrada, salida}], M: [...], ...})
+  // Horarios por día: máximo 2 turnos (mañana y tarde)
   const [mHorariosDia, setMHorariosDia] = useState<Record<string, Array<{entrada:string, salida:string}>>>({
     L: [], M: [], X: [], J: [], V: []
   })
 
   const [saving,    setSaving]    = useState(false)
 
-  useEffect(()=>{load()},[])
+  useEffect(()=>{
+    load()
+    loadConfiguraciones()
+  },[])
 
   async function load(){
     const [p,h] = await Promise.all([
@@ -72,6 +59,16 @@ export default function PersonasPage() {
     setLoading(false)
   }
 
+  async function loadConfiguraciones(){
+    // Cargar áreas desde BD
+    const {data: areasData} = await supabase.from('areas').select('nombre').eq('activo',true).order('nombre')
+    // Cargar orígenes desde BD
+    const {data: origenesData} = await supabase.from('origenes').select('nombre').eq('activo',true).order('nombre')
+    
+    setAreas(areasData?.map(a=>a.nombre) || ['Ing. Sistemas','Ing. Ambiental','Comunicaciones','Derecho'])
+    setOrigenes(origenesData?.map(o=>o.nombre) || ['UNASAM','SENATI','UCV','EXTERNO'])
+  }
+
   function horarioResumen(pid:string){
     return DIAS.map(d=>{
       const ff = horarios.filter(h=>h.persona_id===pid && h.dia===d)
@@ -80,17 +77,30 @@ export default function PersonasPage() {
     }).filter(Boolean).join(' | ')
   }
 
+  // Calcular horas semanales automáticamente
+  function calcularHorasSemanales(horariosDia: Record<string, Array<{entrada:string, salida:string}>>){
+    let totalMinutos = 0
+    DIAS.forEach(dia=>{
+      (horariosDia[dia]||[]).forEach(franja=>{
+        const [hE, mE] = franja.entrada.split(':').map(Number)
+        const [hS, mS] = franja.salida.split(':').map(Number)
+        const minutos = (hS * 60 + mS) - (hE * 60 + mE)
+        totalMinutos += Math.max(0, minutos)
+      })
+    })
+    return (totalMinutos / 60).toFixed(1) // Retornar en horas con 1 decimal
+  }
+
   function abrirNuevo(){
     setEditando(null)
     setMNombre('')
     setMDni('')
     setMRol('Practicante')
     setMSubrol('')
-    setMOrigen('UNASAM')
+    setMOrigen(origenes[0]||'UNASAM')
     setMGrupo('ESAT')
-    setMArea('Ing. Sistemas')
+    setMArea(areas[0]||'Ing. Sistemas')
     setMColor('#1e40af')
-    setMHsSem('')
     setMHorariosDia({L: [], M: [], X: [], J: [], V: []})
     setModal(true)
   }
@@ -101,11 +111,10 @@ export default function PersonasPage() {
     setMDni(p.dni)
     setMRol(p.rol)
     setMSubrol(p.subrol??'')
-    setMOrigen(p.origen??'UNASAM')
+    setMOrigen(p.origen??origenes[0]||'UNASAM')
     setMGrupo(p.grupo)
-    setMArea(p.area??'Ing. Sistemas')
+    setMArea(p.area??areas[0]||'Ing. Sistemas')
     setMColor(p.color??'#1e40af')
-    setMHsSem(p.hs_semanales?.toString()??'')
     
     // Cargar horarios por día desde la BD
     const hPersona = horarios.filter(h=>h.persona_id===p.id)
@@ -114,7 +123,10 @@ export default function PersonasPage() {
     }
     hPersona.forEach(h=>{
       if(horariosPorDia[h.dia]) {
-        horariosPorDia[h.dia].push({entrada: h.hora_entrada, salida: h.hora_salida})
+        horariosPorDia[h.dia].push({
+          entrada: h.hora_entrada.slice(0,5), 
+          salida: h.hora_salida.slice(0,5)
+        })
       }
     })
     setMHorariosDia(horariosPorDia)
@@ -126,17 +138,17 @@ export default function PersonasPage() {
     load()
   }
 
-  // Función para "eliminar" (en realidad es desactivar)
-  async function desactivarPersona(id:string, nombre:string){
-    if(!confirm(`¿Desactivar a ${nombre}?\n\nEl usuario pasará a la lista de "Personal Inactivo" y podrá ser reactivado en el futuro.`)) return
-    await supabase.from('personas').update({activo:false}).eq('id',id)
-    load()
-  }
-
-  // Agregar franja horaria a un día
+  // Agregar franja horaria (máximo 2: mañana y tarde)
   function agregarFranja(dia:string){
+    const actuales = mHorariosDia[dia]||[]
+    if(actuales.length >= 2) {
+      alert('Máximo 2 turnos por día (mañana y tarde)')
+      return
+    }
     const nuevas = {...mHorariosDia}
-    nuevas[dia] = [...(nuevas[dia]||[]), {entrada:'08:00', salida:'13:00'}]
+    // Si es el primer turno, poner mañana. Si es el segundo, poner tarde
+    const horaDefault = actuales.length === 0 ? {entrada:'08:00', salida:'13:00'} : {entrada:'15:00', salida:'18:00'}
+    nuevas[dia] = [...actuales, horaDefault]
     setMHorariosDia(nuevas)
   }
 
@@ -161,6 +173,8 @@ export default function PersonasPage() {
     setSaving(true)
     
     const esEco = mRol==='EcoBIOTEM'
+    const primeraEntrada = mHorariosDia.L?.[0]?.entrada ?? '08:00'
+    
     const data = {
       nombre: mNombre,
       dni: mDni,
@@ -168,11 +182,11 @@ export default function PersonasPage() {
       subrol: mSubrol||null,
       origen: mOrigen,
       grupo: mGrupo,
-      hora_ingreso: esEco?null:(mHorariosDia.L?.[0]?.entrada ?? '08:00:00'),
+      hora_ingreso: esEco?null:(primeraEntrada + ':00'),
       tolerancia: 10,
       color: mColor,
       area: mArea||null,
-      hs_semanales: mHsSem?parseFloat(mHsSem):null,
+      hs_semanales: esEco?null:parseFloat(calcularHorasSemanales(mHorariosDia)),
       sin_horario: esEco
     }
 
@@ -186,7 +200,7 @@ export default function PersonasPage() {
         personaId = nuevo.id
       }
 
-      // Guardar horarios por día
+      // Guardar horarios por día (solo si no es EcoBIOTEM)
       if(personaId && !esEco){
         // Primero eliminar horarios antiguos si es edición
         if(editando){
@@ -229,7 +243,7 @@ export default function PersonasPage() {
     (p.dni??'').includes(buscar)||(p.rol??'').toLowerCase().includes(buscar.toLowerCase())
   )
 
-  if(loading) return <div style={{padding:40,textAlign:'center',color:'#94a3b8'}}>Cargando personas...</div>
+  if(loading) return <div style={{padding:40,textAlign:'center',color:'#94a3b8'}}>Cargando...</div>
 
   return (
     <div>
@@ -267,12 +281,12 @@ export default function PersonasPage() {
       {vistaInactivos && personasInactivas.length > 0 && (
         <div style={{background:'#fef3c7',border:'1.5px solid #fde68a',borderRadius:10,padding:'12px 16px',marginBottom:20}}>
           <span style={{fontSize:13,color:'#b45309',fontWeight:600}}>
-            ℹ️ Mostrando {personasInactivas.length} persona(s) inactiva(s) - Pueden ser reactivadas en cualquier momento
+            ℹ️ Mostrando {personasInactivas.length} persona(s) inactiva(s) - Pueden ser reactivadas
           </span>
         </div>
       )}
 
-      {/* Lista de personas agrupadas */}
+      {/* Lista de personas */}
       {GRUPOS_CONFIG.map(grupo=>{
         const gp = filtradas.filter(p=>p.rol===grupo.rol)
         if(!gp.length) return null
@@ -292,9 +306,7 @@ export default function PersonasPage() {
                       </div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:600}}>{p.nombre}</div>
-                        <div style={{fontSize:11,color:'#94a3b8'}}>
-                          {p.rol==='SENATI'?`Practicante SENATI · ${p.subrol}`:p.rol==='Practicante'?`Practicante UNASAM · ${p.subrol}`:p.rol}
-                        </div>
+                        <div style={{fontSize:11,color:'#94a3b8'}}>{p.rol} · {p.subrol||p.area||'-'}</div>
                       </div>
                       <span style={{fontSize:10,fontWeight:600,padding:'3px 8px',borderRadius:20,background:p.activo!==false?'#dcfce7':'#fee2e2',color:p.activo!==false?'#15803d':'#b91c1c'}}>
                         {p.activo!==false?'Activo':'Inactivo'}
@@ -320,11 +332,6 @@ export default function PersonasPage() {
                         style={{padding:'5px 10px',background:p.activo!==false?'#fef3c7':'#dcfce7',color:p.activo!==false?'#b45309':'#15803d',border:'none',borderRadius:7,fontSize:11,cursor:'pointer',fontWeight:600}}>
                         {p.activo!==false?'Desactivar':'Activar'}
                       </button>
-                      {p.activo!==false && (
-                        <button onClick={()=>desactivarPersona(p.id,p.nombre)} style={{padding:'5px 10px',background:'#fee2e2',color:'#b91c1c',border:'1px solid #fca5a5',borderRadius:7,fontSize:11,cursor:'pointer',fontWeight:600}}>
-                          🗑 Desactivar
-                        </button>
-                      )}
                     </div>
                   </div>
                 )
@@ -340,7 +347,7 @@ export default function PersonasPage() {
         </div>
       )}
 
-      {/* Modal Agregar/Editar */}
+      {/* Modal */}
       {modal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20,overflowY:'auto'}}
           onClick={e=>{if(e.target===e.currentTarget)setModal(false)}}>
@@ -376,14 +383,14 @@ export default function PersonasPage() {
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Origen</label>
                 <select value={mOrigen} onChange={e=>setMOrigen(e.target.value)}
                   style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
-                  {ORIGENES.map(o=><option key={o} value={o}>{o}</option>)}
+                  {origenes.map(o=><option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Área</label>
                 <select value={mArea} onChange={e=>setMArea(e.target.value)}
                   style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
-                  {AREAS.map(a=><option key={a} value={a}>{a}</option>)}
+                  {areas.map(a=><option key={a} value={a}>{a}</option>)}
                 </select>
               </div>
             </div>
@@ -404,25 +411,29 @@ export default function PersonasPage() {
               </div>
             </div>
 
-            {/* Horarios por día */}
+            {/* Horarios por día - Máximo 2 turnos */}
             {mRol !== 'EcoBIOTEM' && (
               <div style={{marginBottom:16,padding:'16px',background:'#f8fafc',borderRadius:12,border:'1.5px solid #e2e8f0'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-                  <h4 style={{fontSize:13,fontWeight:600,color:'#0f172a',margin:0}}>📅 Horarios por día</h4>
-                  <span style={{fontSize:11,color:'#64748b'}}>Agrega turnos (mañana/tarde)</span>
+                  <h4 style={{fontSize:13,fontWeight:600,color:'#0f172a',margin:0}}>📅 Horarios por día (Máx. 2 turnos)</h4>
                 </div>
                 
                 {DIAS.map(dia=>(
                   <div key={dia} style={{marginBottom:12,padding:'10px',background:'white',borderRadius:8,border:'1px solid #e2e8f0'}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
                       <span style={{fontSize:12,fontWeight:600,color:'#475569'}}>{DIAS_LABEL[dia]}</span>
-                      <button onClick={()=>agregarFranja(dia)} 
-                        style={{padding:'3px 8px',background:'#10b981',color:'white',border:'none',borderRadius:5,fontSize:10,cursor:'pointer',fontWeight:600}}>
-                        + Agregar turno
-                      </button>
+                      {(mHorariosDia[dia]||[]).length < 2 && (
+                        <button onClick={()=>agregarFranja(dia)} 
+                          style={{padding:'3px 8px',background:'#10b981',color:'white',border:'none',borderRadius:5,fontSize:10,cursor:'pointer',fontWeight:600}}>
+                          + {(mHorariosDia[dia]||[]).length===0?'Turno mañana':'Turno tarde'}
+                        </button>
+                      )}
                     </div>
                     {(mHorariosDia[dia]||[]).map((franja,idx)=>(
                       <div key={idx} style={{display:'flex',gap:8,alignItems:'center',marginBottom:6}}>
+                        <span style={{fontSize:10,color:'#94a3b8',minWidth:60}}>
+                          {idx===0?'🌅 Mañana':'🌆 Tarde'}
+                        </span>
                         <input type="time" value={franja.entrada} onChange={e=>actualizarFranja(dia,idx,'entrada',e.target.value)}
                           style={{flex:1,padding:'6px 8px',border:'1px solid #d1d5db',borderRadius:6,fontSize:12}}/>
                         <span style={{color:'#94a3b8'}}>a</span>
@@ -437,21 +448,15 @@ export default function PersonasPage() {
                     )}
                   </div>
                 ))}
+                
+                {/* Mostrar horas calculadas */}
+                <div style={{marginTop:12,padding:'10px',background:'#dbeafe',borderRadius:8,textAlign:'center'}}>
+                  <span style={{fontSize:12,color:'#1e40af',fontWeight:600}}>
+                    ⏱ Total calculado: {calcularHorasSemanales(mHorariosDia)} horas/semana
+                  </span>
+                </div>
               </div>
             )}
-
-            <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:12,marginBottom:16}}>
-              <div>
-                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Horas/semana</label>
-                <input type="number" value={mHsSem} onChange={e=>setMHsSem(e.target.value)} placeholder="20" step="0.5"
-                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
-              </div>
-              <div>
-                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Color</label>
-                <input type="color" value={mColor} onChange={e=>setMColor(e.target.value)} 
-                  style={{height:38,padding:'2px 4px',width:60,border:'1.5px solid #e2e8f0',borderRadius:9,cursor:'pointer'}}/>
-              </div>
-            </div>
 
             <div style={{display:'flex',gap:8,justifyContent:'flex-end',paddingTop:16,borderTop:'1px solid #e2e8f0'}}>
               <button onClick={()=>setModal(false)} 
