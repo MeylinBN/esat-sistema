@@ -114,19 +114,24 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
       {/* Métricas */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14,marginBottom:20}}>
         {[
-          {l:'Personal activo',v:esat.length,s:`En ${[...new Set(esat.map(p=>p.rol))].length} categorías`,i:'👥',c:'#002F6C'},
-          {l:'Presentes hoy',v:presentes,s:`de ${esat.length} esperados`,i:'✅',c:'#15803d'},
-          {l:'Tardanzas mes',v:tardanzas,s:'+1 vs. mes anterior',i:'⏰',c:'#dc2626'},
-          {l:'Avance promedio',v:`${avancePromedio}%`,s:'Semana actual',i:'📝',c:'#b45309'},
-        ].map(m=>(
-          <div key={m.l} style={{background:'white',borderRadius:12,padding:'16px 18px',border:'1.5px solid #e2e8f0',boxShadow:'0 1px 3px rgba(0,0,0,.06)',position:'relative',overflow:'hidden'}}>
-            <div style={{fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>{m.l}</div>
-            <div style={{fontSize:30,fontWeight:700,color:m.c,lineHeight:1}}>{m.v}</div>
-            <div style={{fontSize:11,color:'#94a3b8',marginTop:4}}>{m.s}</div>
-            <div style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:28,opacity:.15}}>{m.i}</div>
-          </div>
-        ))}
-      </div>
+         // Calcular roles únicos sin usar Set (para compatibilidad con TS)
+const rolesUnicos = esat.map(p => p.rol).filter((v, i, a) => a.indexOf(v) === i);
+
+<div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14,marginBottom:20}}>
+  {[
+    {l:'Personal activo',v:esat.length,s:`En ${rolesUnicos.length} categorías`,i:'👥',c:'#002F6C'},
+    {l:'Presentes hoy',v:presentes,s:`de ${esat.length} esperados`,i:'✅',c:'#15803d'},
+    {l:'Tardanzas mes',v:tardanzas,s:'+1 vs. mes anterior',i:'⏰',c:'#dc2626'},
+    {l:'Avance promedio',v:`${avancePromedio}%`,s:'Semana actual',i:'📝',c:'#b45309'},
+  ].map(m=>(
+    <div key={m.l} style={{background:'white',borderRadius:12,padding:'16px 18px',border:'1.5px solid #e2e8f0',boxShadow:'0 1px 3px rgba(0,0,0,.06)',position:'relative',overflow:'hidden'}}>
+      <div style={{fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>{m.l}</div>
+      <div style={{fontSize:30,fontWeight:700,color:m.c,lineHeight:1}}>{m.v}</div>
+      <div style={{fontSize:11,color:'#94a3b8',marginTop:4}}>{m.s}</div>
+      <div style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:28,opacity:.15}}>{m.i}</div>
+    </div>
+  ))}
+</div>
 
       {/* ... el resto del JSX de Claude se mantiene igual ... */}
       {/* (Te lo doy completo en el siguiente mensaje para no saturar) */}
