@@ -9,7 +9,6 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  // ✅ CORREGIDO: Agregué 'nombre' al select para que no falle
   const { data: perfil } = await supabase
     .from('personas')
     .select('rol, subrol, nombre') 
@@ -21,24 +20,28 @@ export default async function DashboardPage() {
     redirect('/auth/login')
   }
 
-  // Redirigir según rol
+  // Redirigir según rol (lógica mejorada)
   if (perfil.rol === 'Coordinador') {
-    // Verificar si es logístico
-    if (perfil.subrol?.toLowerCase().includes('logístico') || perfil.subrol?.toLowerCase().includes('logistico')) {
+    // Normalizar texto para comparar sin tildes ni mayúsculas
+    const subrolNormalizado = (perfil.subrol || '').toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Quita tildes
+    
+    // Si es logístico (en rol o subrol)
+    if (subrolNormalizado.includes('logistico') || perfil.rol?.toLowerCase().includes('logistico')) {
       redirect('/dashboard/logisticos')
     }
-    // Si es general, continúa y muestra el dashboard
+    // Si es general, se queda en /dashboard
   } else {
-    // Practicantes, SENATI, etc.
+    // Todos los demás → panel2
     redirect('/panel2')
   }
 
-  // Si llegó aquí, es Coordinador General
+  // Dashboard para Coordinador General
   return (
     <div style={{ padding: 40, fontFamily: 'sans-serif' }}>
       <h1>👋 Dashboard General</h1>
       <p>Bienvenido, {perfil.nombre}</p>
-      <p style={{ color: 'gray' }}><em>(Aquí pegaremos el contenido completo en el siguiente paso)</em></p>
+      <p style={{ color: 'gray' }}><em>Próximamente: métricas y estado del equipo</em></p>
     </div>
   )
 }
