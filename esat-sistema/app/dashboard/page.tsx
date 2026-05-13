@@ -1,14 +1,17 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import DashboardClient from './_components/DashboardClient'
 
 export const revalidate = 0
 
 export default async function DashboardPage() {
   const supabase = await createClient()
   
+  // 1. Verificar sesión
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
+  // 2. Obtener perfil
   const { data: perfil } = await supabase
     .from('personas')
     .select('rol, subrol, nombre, dni') 
@@ -20,35 +23,24 @@ export default async function DashboardPage() {
     redirect('/auth/login')
   }
 
-  // Debug: ver qué valores tiene
-  const subrolLimpio = (perfil.subrol || '').trim().toLowerCase()
-  const dni = perfil.dni
-  
-  // Lógica específica para Francisco (DNI: 70189681)
-  if (dni === '70189681' || dni === '72121099' || dni === '77678583' || dni === '72728855' || dni === '32646306') {
-    // Coordinadores Logísticos por DNI
+  // 3. Redirección por roles
+  const dniLogisticos = ['70189681', '72121099', '77678583', '72728855', '32646306']
+  if (dniLogisticos.includes(perfil.dni)) {
     redirect('/dashboard/logisticos')
   }
-
-  // Lógica por subrol
   if (perfil.rol === 'Coordinador') {
-    if (subrolLimpio.includes('logistico') || 
-        subrolLimpio.includes('l.') ||
-        subrolLimpio.includes('logística')) {
+    const subrolLimpio = (perfil.subrol || '').trim().toLowerCase()
+    if (subrolLimpio.includes('logistico') || subrolLimpio.includes('l.')) {
       redirect('/dashboard/logisticos')
     }
   } else {
     redirect('/panel2')
   }
 
-  // Dashboard General (solo Coordinadores Generales)
+  // 4. Si llegó aquí, es Coordinador General → Mostrar Dashboard completo
   return (
-    <div style={{ padding: 40, fontFamily: 'sans-serif' }}>
-      <h1>👋 Dashboard General</h1>
-      <p>Bienvenido, {perfil.nombre}</p>
-      <p style={{ color: 'gray', fontSize: 12 }}>
-        DNI: {dni} | Subrol: "{perfil.subrol}" | Limpio: "{subrolLimpio}"
-      </p>
+    <div>
+      <DashboardClient nombre={perfil.nombre} />
     </div>
   )
 }
