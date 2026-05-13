@@ -47,19 +47,19 @@ export default function PermisosPage() {
       setError(null)
       
       // Cargar personas
-      const {  personasData } = await supabase
-        .from('personas')
-        .select('id,nombre,color')
-        .eq('activo', true)
+      const { data: personasData } = await supabase
+  .from('personas')
+  .select('id,nombre,color')
+  .eq('activo', true)
         .order('nombre')
       
       setPersonas(personasData ?? [])
 
       // Cargar permisos
-      const {  permisosData } = await supabase
-        .from('permisos')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const { data: permisosData } = await supabase
+  .from('permisos')
+  .select('*')
+  .order('created_at', { ascending: false })
       
       // Unir manualmente con personas
       const permisosConPersonas = (permisosData ?? []).map(perm => {
