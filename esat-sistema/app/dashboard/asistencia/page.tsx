@@ -117,24 +117,24 @@ export default function AsistenciaPage() {
           <p style={{fontSize:12,color:'#475569',marginTop:3,textTransform:'capitalize'}}>{format(new Date(),"EEEE d 'de' MMMM yyyy",{locale:es})}</p>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-          <button onClick={()=>setVerLista(!verLista)} className="btn btn-s btn-sm">{verLista?'Ver tarjetas':'Ver lista completa'}</button>
-          <button onClick={()=>{setModal(true);setMHora(format(new Date(),'HH:mm'))}} className="btn btn-p">+ Registrar</button>
+          <button onClick={()=>setVerLista(!verLista)} style={{padding:'8px 16px',background:'white',border:'1.5px solid #e2e8f0',borderRadius:8,cursor:'pointer',fontWeight:600}}>{verLista?'Ver tarjetas':'Ver lista completa'}</button>
+          <button onClick={()=>{setModal(true);setMHora(format(new Date(),'HH:mm'))}} style={{padding:'8px 16px',background:'#002F6C',color:'white',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600}}>+ Registrar</button>
         </div>
       </div>
 
       {/* Métricas */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14,marginBottom:20}}>
         {[
-          {l:'Total equipo',v:total,s:'ESAT activos',c:'m-azul',i:'👥'},
-          {l:'Presentes hoy',v:presentes,s:`${total>0?Math.round(presentes/total*100):0}% asistencia`,c:'m-verde',i:'✅'},
-          {l:'Tardanzas',v:tardanzas,s:'llegaron tarde',c:'m-dorado',i:'⏰'},
-          {l:'Ausentes',v:total-presentes,s:'sin registrar o ausentes',c:'m-rojo',i:'⚠️'},
+          {l:'Total equipo',v:total,s:'ESAT activos',c:'#002F6C',i:'👥'},
+          {l:'Presentes hoy',v:presentes,s:`${total>0?Math.round(presentes/total*100):0}% asistencia`,c:'#15803d',i:'✅'},
+          {l:'Tardanzas',v:tardanzas,s:'llegaron tarde',c:'#d97706',i:'⏰'},
+          {l:'Ausentes',v:total-presentes,s:'sin registrar o ausentes',c:'#dc2626',i:'⚠️'},
         ].map(m=>(
-          <div key={m.l} className={`metric ${m.c}`}>
-            <div className="metric-lbl">{m.l}</div>
-            <div className="metric-val">{m.v}</div>
-            <div className="metric-sub">{m.s}</div>
-            <div className="metric-icon">{m.i}</div>
+          <div key={m.l} style={{background:'white',borderRadius:12,padding:'16px 18px',border:`1.5px solid ${m.c}22`,boxShadow:'0 1px 3px rgba(0,0,0,.06)',position:'relative',overflow:'hidden'}}>
+            <div style={{fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',marginBottom:6}}>{m.l}</div>
+            <div style={{fontSize:30,fontWeight:700,color:m.c,lineHeight:1}}>{m.v}</div>
+            <div style={{fontSize:11,color:'#94a3b8',marginTop:4}}>{m.s}</div>
+            <div style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:28,opacity:.15}}>{m.i}</div>
           </div>
         ))}
       </div>
@@ -153,47 +153,72 @@ export default function AsistenciaPage() {
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:12}}>
                   {gpersonas.map(p=>{
-                    const a=getA(p.id)
-                    const estado=a?.estado??'sin_registrar'
-                    const cfg=ESTADO_CFG[estado]??ESTADO_CFG.sin_registrar
-                    const franjas=getHoy(p.id)
-                    const turno=turnoLabel(franjas)
-                    const tAct=tareasActivas(p.id)
+                    // CORRECCIÓN: Obtener TODOS los registros del día para esta persona
+                    const asistPersona = asistencias.filter(a => a.persona_id === p.id)
+                    const asist1 = asistPersona[0] // Mañana (asumido)
+                    const asist2 = asistPersona[1] // Tarde (si existe)
+                    
+                    // Determinar el estado más relevante (si una es tarde, mostramos tarde)
+                    const estado = asistPersona.length > 0 
+                      ? (asistPersona.some(a => a.estado === 'tarde') ? 'tarde' : asistPersona[0].estado)
+                      : 'sin_registrar'
+
+                    const cfg = ESTADO_CFG[estado] ?? ESTADO_CFG.sin_registrar
+                    const franjas = getHoy(p.id)
+                    const turno = turnoLabel(franjas)
+                    const tAct = tareasActivas(p.id)
+
                     return (
                       <div key={p.id} onClick={()=>{setMPerId(p.id);setModal(true);setMHora(format(new Date(),'HH:mm'))}}
                         style={{background:cfg.bg,border:`1.5px solid ${cfg.border}`,borderRadius:12,padding:14,cursor:'pointer',transition:'all .2s',position:'relative'}}
                         onMouseEnter={e=>(e.currentTarget as any).style.boxShadow='0 4px 16px rgba(0,0,0,.1)'}
                         onMouseLeave={e=>(e.currentTarget as any).style.boxShadow=''}>
-                        <span style={{position:'absolute',top:10,right:10,padding:'2px 8px',borderRadius:20,fontSize:9,fontWeight:700,background:cfg.pill,color:cfg.ptxt}}>{cfg.label}</span>
-                        <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:8}}>
+                        
+                        {/* BADGE - Se mantiene absolute pero ahora el contenido de abajo tendrá padding */}
+                        <span style={{position:'absolute',top:10,right:10,padding:'2px 8px',borderRadius:20,fontSize:9,fontWeight:700,background:cfg.pill,color:cfg.ptxt}}>
+                          {cfg.label}
+                        </span>
+
+                        <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:8, paddingRight: '65px'}}> 
+                          {/* ^^^ AQUÍ ESTÁ LA CLAVE: paddingRight de 65px deja espacio para el badge ^^^ */}
+                          
                           <div style={{width:38,height:38,borderRadius:'50%',background:p.color,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:14,color:'white',flexShrink:0,position:'relative'}}>
                             {p.nombre.charAt(0)}
                             <div style={{position:'absolute',inset:-2,borderRadius:'50%',border:`2px solid ${cfg.border}`}}/>
                           </div>
+                          
                           <div style={{flex:1,minWidth:0}}>
+                            {/* El truncamiento funcionará ahora gracias al padding de arriba */}
                             <div style={{fontSize:12,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.nombre}</div>
                             <div style={{fontSize:9,color:'#94a3b8',marginTop:1}}>
                               {p.rol==='SENATI'?`Prac. SENATI · ${p.subrol}`:p.rol==='Practicante'?`Prac. UNASAM · ${p.subrol}`:p.rol}
                             </div>
                           </div>
                         </div>
+
+                        {/* DATOS - Ahora soporta doble turno */}
                         <div style={{borderTop:'1px solid rgba(0,0,0,.06)',paddingTop:8,display:'flex',justifyContent:'space-between'}}>
-                          <div style={{textAlign:'center'}}>
+                          <div style={{textAlign:'center', flex: 1}}>
                             <div style={{fontSize:9,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.04em'}}>ENTRADA</div>
-                            <div style={{fontSize:12,fontWeight:600}}>{a?.hora_entrada?.slice(0,5)??'—'}</div>
+                            <div style={{fontSize:11,fontWeight:700,color:'#0f172a'}}>{asist1?.hora_entrada?.slice(0,5) ?? '—'}</div>
+                            {/* Si hay segundo registro, lo mostramos debajo en chiquito */}
+                            {asist2 && <div style={{fontSize:9, color:'#64748b',marginTop:2}}>{asist2.hora_entrada?.slice(0,5)}</div>}
                           </div>
-                          <div style={{textAlign:'center'}}>
+                          <div style={{textAlign:'center', flex: 1}}>
                             <div style={{fontSize:9,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.04em'}}>SALIDA</div>
-                            <div style={{fontSize:12,fontWeight:600}}>{a?.hora_salida?.slice(0,5)??'—'}</div>
+                            <div style={{fontSize:11,fontWeight:700,color:'#0f172a'}}>{asist1?.hora_salida?.slice(0,5) ?? '—'}</div>
+                            {asist2 && <div style={{fontSize:9, color:'#64748b',marginTop:2}}>{asist2.hora_salida?.slice(0,5)}</div>}
                           </div>
-                          <div style={{textAlign:'center'}}>
+                          <div style={{textAlign:'center', flex: 1}}>
                             <div style={{fontSize:9,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.04em'}}>TAREAS</div>
                             <div style={{fontSize:12,fontWeight:600,color:'#002F6C'}}>{tAct}</div>
                           </div>
                         </div>
-                        {a?.tardanza_min>0&&<div style={{fontSize:10,color:'#ea580c',fontWeight:600,textAlign:'center',marginTop:4}}>+{a.tardanza_min} min tardanza</div>}
-                        <div style={{fontSize:10,color:'#94a3b8',textAlign:'center',marginTop:4}}>
-                          {turno!=='—'?turno:p.hora_ingreso?`Esp: ${p.hora_ingreso.slice(0,5)}`:'Sin horario hoy'}
+
+                        {asist1?.tardanza_min>0 && <div style={{fontSize:10,color:'#ea580c',fontWeight:600,textAlign:'center',marginTop:4}}>+{asist1.tardanza_min} min tardanza</div>}
+                        
+                        <div style={{fontSize:10,color:'#94a3b8',textAlign:'center',marginTop:4, borderTop:'1px dashed #e2e8f0', paddingTop:4}}>
+                          {turno!=='—' ? turno : (p.hora_ingreso ? `Esp: ${p.hora_ingreso.slice(0,5)}` : 'Sin horario hoy')}
                         </div>
                       </div>
                     )
@@ -205,86 +230,96 @@ export default function AsistenciaPage() {
 
           {/* EcoBIOTEM */}
           {eco.length>0&&(
-            <div className="card" style={{border:'2px solid #86efac',marginBottom:24}}>
-              <div className="card-body">
-                <div className="card-title"><span className="dot" style={{background:'#15803d'}}/>🌿 GI EcoBIOTEM — Horario flexible</div>
-                <p style={{fontSize:13,color:'#475569',lineHeight:1.7,marginBottom:12}}>Los miembros del GI EcoBIOTEM <strong>no tienen horario fijo</strong>. Registran horas desde su panel personal. <strong>{eco.length} miembros activos.</strong></p>
+            <div style={{background:'white',borderRadius:14,border:'2px solid #86efac',marginBottom:24,padding:20}}>
+              <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:12,display:'flex',alignItems:'center',gap:8}}>
+                <div style={{width:8,height:8,borderRadius:'50%',background:'#15803d'}}/>🌿 GI EcoBIOTEM — Horario flexible
               </div>
+              <p style={{fontSize:13,color:'#475569',lineHeight:1.7,margin:0}}>
+                Los miembros del GI EcoBIOTEM <strong>no tienen horario fijo</strong>. Registran horas desde su panel personal. <strong>{eco.length} miembros activos.</strong>
+              </p>
             </div>
           )}
         </>
       ) : (
         /* Vista lista completa */
-        <div className="card">
-          <div className="card-body">
-            <div className="card-title"><span className="dot" style={{background:'#002F6C'}}/>Registro completo del día</div>
-            <div style={{overflowX:'auto'}}>
-              <table style={{width:'100%',borderCollapse:'collapse'}}>
-                <thead>
-                  <tr style={{background:'#f1f5f9'}}>
-                    {['Nombre','Horario hoy','Entrada','Salida / Extra','Estado','Tardanza','Obs.'].map(h=>(
-                      <th key={h} style={{padding:'8px 12px',textAlign:'left',fontSize:11,fontWeight:600,color:'#475569',textTransform:'uppercase',letterSpacing:'.06em',borderBottom:'2px solid #e2e8f0'}}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {esat.map((p,i)=>{
-                    const a=getA(p.id)
-                    const cfg=ESTADO_CFG[a?.estado??'sin_registrar']??ESTADO_CFG.sin_registrar
-                    const franjas=getHoy(p.id)
-                    return (
-                      <tr key={p.id} style={{background:i%2===0?'white':'#f8fafc'}}>
-                        <td style={{padding:'10px 12px',borderBottom:'1px solid #e2e8f0'}}>
-                          <div style={{display:'flex',alignItems:'center',gap:8}}>
-                            <div style={{width:28,height:28,borderRadius:'50%',background:p.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'white'}}>{p.nombre.charAt(0)}</div>
-                            <div>
-                              <div style={{fontSize:12,fontWeight:600}}>{p.nombre}</div>
-                              <div style={{fontSize:10,color:'#94a3b8'}}>{p.rol==='SENATI'?'SENATI':p.rol==='Practicante'?`UNASAM · ${p.subrol}`:p.rol}</div>
-                            </div>
+        <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',overflow:'hidden'}}>
+          <div style={{padding:20,borderBottom:'1px solid #e2e8f0',display:'flex',alignItems:'center',gap:8}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:'#002F6C'}}/>
+            <span style={{fontSize:14,fontWeight:600,color:'#0f172a'}}>Registro completo del día</span>
+          </div>
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead>
+                <tr style={{background:'#f8fafc'}}>
+                  {['Nombre','Horario hoy','Entrada','Salida','Estado','Tardanza','Obs.'].map(h=>(
+                    <th key={h} style={{padding:'12px',textAlign:'left',fontSize:11,fontWeight:600,color:'#64748b',textTransform:'uppercase',letterSpacing:'.06em'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {esat.map((p,i)=>{
+                  const a=getA(p.id)
+                  const cfg=ESTADO_CFG[a?.estado??'sin_registrar']??ESTADO_CFG.sin_registrar
+                  const franjas=getHoy(p.id)
+                  return (
+                    <tr key={p.id} style={{background:i%2===0?'white':'#f8fafc',borderBottom:'1px solid #f1f5f9'}}>
+                      <td style={{padding:'10px 12px'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8}}>
+                          <div style={{width:28,height:28,borderRadius:'50%',background:p.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'white'}}>{p.nombre.charAt(0)}</div>
+                          <div>
+                            <div style={{fontSize:12,fontWeight:600}}>{p.nombre}</div>
+                            <div style={{fontSize:10,color:'#94a3b8'}}>{p.rol==='SENATI'?'SENATI':p.rol==='Practicante'?`UNASAM · ${p.subrol}`:p.rol}</div>
                           </div>
-                        </td>
-                        <td style={{padding:'10px 12px',borderBottom:'1px solid #e2e8f0',fontSize:11,color:'#475569'}}>{turnoLabel(franjas)}</td>
-                        <td style={{padding:'10px 12px',borderBottom:'1px solid #e2e8f0',fontSize:12,fontWeight:600}}>{a?.hora_entrada?.slice(0,5)??'—'}</td>
-                        <td style={{padding:'10px 12px',borderBottom:'1px solid #e2e8f0',fontSize:12}}>{a?.hora_salida?.slice(0,5)??'—'}</td>
-                        <td style={{padding:'10px 12px',borderBottom:'1px solid #e2e8f0'}}>
-                          <span style={{padding:'3px 9px',borderRadius:20,fontSize:10,fontWeight:700,background:cfg.pill,color:cfg.ptxt}}>{cfg.label}</span>
-                        </td>
-                        <td style={{padding:'10px 12px',borderBottom:'1px solid #e2e8f0',fontSize:11,color:'#ea580c',fontWeight:600}}>{a?.tardanza_min>0?`+${a.tardanza_min} min`:'—'}</td>
-                        <td style={{padding:'10px 12px',borderBottom:'1px solid #e2e8f0',fontSize:11,color:'#94a3b8'}}>{a?.observacion??'—'}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </td>
+                      <td style={{padding:'10px 12px',fontSize:11,color:'#475569'}}>{turnoLabel(franjas)}</td>
+                      <td style={{padding:'10px 12px',fontSize:12,fontWeight:600}}>{a?.hora_entrada?.slice(0,5)??'—'}</td>
+                      <td style={{padding:'10px 12px',fontSize:12}}>{a?.hora_salida?.slice(0,5)??'—'}</td>
+                      <td style={{padding:'10px 12px'}}>
+                        <span style={{padding:'3px 9px',borderRadius:20,fontSize:10,fontWeight:700,background:cfg.pill,color:cfg.ptxt}}>{cfg.label}</span>
+                      </td>
+                      <td style={{padding:'10px 12px',fontSize:11,color:'#ea580c',fontWeight:600}}>{a?.tardanza_min>0?`+${a.tardanza_min} min`:'—'}</td>
+                      <td style={{padding:'10px 12px',fontSize:11,color:'#94a3b8'}}>{a?.observacion??'—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
       {/* Modal */}
       {modal&&(
-        <div className="mo" onClick={e=>{if(e.target===e.currentTarget)setModal(false)}}>
-          <div className="mo-box">
-            <div className="mo-head"><h3>Registrar asistencia</h3><button className="mo-close" onClick={()=>setModal(false)}>×</button></div>
-            <div className="ig" style={{marginBottom:12}}>
-              <label>Persona</label>
-              <select value={mPerId} onChange={e=>setMPerId(e.target.value)}>
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>{if(e.target===e.currentTarget)setModal(false)}}>
+          <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:400,boxShadow:'0 24px 80px rgba(0,0,0,.25)'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+              <h3 style={{fontSize:16,fontWeight:700,margin:0}}>Registrar asistencia</h3>
+              <button onClick={()=>setModal(false)} style={{width:28,height:28,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+            </div>
+            <div style={{marginBottom:12}}>
+              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Persona</label>
+              <select value={mPerId} onChange={e=>setMPerId(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
                 <option value="">Seleccionar...</option>
                 {personas.map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
-              <div className="ig"><label>Tipo</label>
-                <select value={mTipo} onChange={e=>setMTipo(e.target.value as any)}>
+              <div>
+                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Tipo</label>
+                <select value={mTipo} onChange={e=>setMTipo(e.target.value as any)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
                   <option value="entrada">Entrada</option>
                   <option value="salida">Salida</option>
                 </select>
               </div>
-              <div className="ig"><label>Hora</label><input type="time" value={mHora} onChange={e=>setMHora(e.target.value)}/></div>
+              <div>
+                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Hora</label>
+                <input type="time" value={mHora} onChange={e=>setMHora(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+              </div>
             </div>
-            <div className="ig" style={{marginBottom:12}}>
-              <label>Estado</label>
-              <select value={mEstado} onChange={e=>setMEstado(e.target.value)}>
+            <div style={{marginBottom:12}}>
+              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Estado</label>
+              <select value={mEstado} onChange={e=>setMEstado(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
                 <option value="presente">Presente</option>
                 <option value="tarde">Tardanza</option>
                 <option value="ausente">Ausente</option>
@@ -293,13 +328,13 @@ export default function AsistenciaPage() {
                 <option value="falta_injustificada">Falta injustificada</option>
               </select>
             </div>
-            <div className="ig" style={{marginBottom:16}}>
-              <label>Observación (opcional)</label>
-              <input type="text" value={mObs} onChange={e=>setMObs(e.target.value)} placeholder="Ej: llegó por problemas de transporte"/>
+            <div style={{marginBottom:16}}>
+              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Observación (opcional)</label>
+              <input type="text" value={mObs} onChange={e=>setMObs(e.target.value)} placeholder="Ej: llegó por problemas de transporte" style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
             </div>
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-              <button className="btn btn-s" onClick={()=>setModal(false)}>Cancelar</button>
-              <button className="btn btn-p" onClick={guardar} disabled={saving||!mPerId}>{saving?'Guardando...':'Guardar'}</button>
+              <button onClick={()=>setModal(false)} style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>Cancelar</button>
+              <button onClick={guardar} disabled={saving||!mPerId} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mPerId||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mPerId||saving)?.6:1}}>{saving?'Guardando...':'Guardar'}</button>
             </div>
           </div>
         </div>
