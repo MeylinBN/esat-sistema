@@ -105,33 +105,33 @@ export default function PersonasPage() {
     setModal(true)
   }
 
-  async function abrirEditar(p:any){
-    setEditando(p)
-    setMNombre(p.nombre)
-    setMDni(p.dni)
-    setMRol(p.rol)
-    setMSubrol(p.subrol??'')
-    setMOrigen(p.origen??origenes[0]||'UNASAM')
-    setMGrupo(p.grupo)
-    setMArea(p.area??areas[0]||'Ing. Sistemas')
-    setMColor(p.color??'#1e40af')
-    
-    // Cargar horarios por día desde la BD
-    const hPersona = horarios.filter(h=>h.persona_id===p.id)
-    const horariosPorDia: Record<string, Array<{entrada:string, salida:string}>> = {
-      L: [], M: [], X: [], J: [], V: []
-    }
-    hPersona.forEach(h=>{
-      if(horariosPorDia[h.dia]) {
-        horariosPorDia[h.dia].push({
-          entrada: h.hora_entrada.slice(0,5), 
-          salida: h.hora_salida.slice(0,5)
-        })
-      }
-    })
-    setMHorariosDia(horariosPorDia)
-    setModal(true)
+ async function abrirEditar(p:any){
+  setEditando(p)
+  setMNombre(p.nombre)
+  setMDni(p.dni)
+  setMRol(p.rol)
+  setMSubrol(p.subrol ?? '')
+  setMOrigen(p.origen || origenes[0] || 'UNASAM')
+  setMGrupo(p.grupo)
+  setMArea(p.area || areas[0] || 'Ing. Sistemas')
+  setMColor(p.color ?? '#1e40af')
+  
+  // Cargar horarios por día desde la BD
+  const hPersona = horarios.filter(h=>h.persona_id===p.id)
+  const horariosPorDia: Record<string, Array<{entrada:string, salida:string}>> = {
+    L: [], M: [], X: [], J: [], V: []
   }
+  hPersona.forEach(h=>{
+    if(horariosPorDia[h.dia]) {
+      horariosPorDia[h.dia].push({
+        entrada: h.hora_entrada.slice(0,5), 
+        salida: h.hora_salida.slice(0,5)
+      })
+    }
+  })
+  setMHorariosDia(horariosPorDia)
+  setModal(true)
+}
 
   async function toggleActivo(id:string, activo:boolean){
     await supabase.from('personas').update({activo:!activo}).eq('id',id)
