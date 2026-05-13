@@ -32,4 +32,23 @@ export default async function DashboardPage() {
 
   // Lógica por subrol
   if (perfil.rol === 'Coordinador') {
-    if
+    if (subrolLimpio.includes('logistico') || 
+        subrolLimpio.includes('l.') ||
+        subrolLimpio.includes('logística')) {
+      redirect('/dashboard/logisticos')
+    }
+  } else {
+    redirect('/panel2')
+  }
+
+  // Dashboard General (solo Coordinadores Generales)
+  return (
+    <div style={{ padding: 40, fontFamily: 'sans-serif' }}>
+      <h1>👋 Dashboard General</h1>
+      <p>Bienvenido, {perfil.nombre}</p>
+      <p style={{ color: 'gray', fontSize: 12 }}>
+        DNI: {dni} | Subrol: "{perfil.subrol}" | Limpio: "{subrolLimpio}"
+      </p>
+    </div>
+  )
+}
