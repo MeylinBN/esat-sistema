@@ -43,7 +43,7 @@ export default function ExportarPage() {
     if (mes) generarPreview() 
   }, [mes, tipo, selPersonas])
 
-  async function generarPreview() {
+    async function generarPreview() {
     if (!mes) return
     setLoading(true)
     setError(null)
@@ -62,21 +62,10 @@ export default function ExportarPage() {
       if (tipo === 'asistencia') {
         headers = ['Nombre', 'DNI', 'Rol', 'Fecha', 'Entrada', 'Salida', 'Estado', 'Tardanza (min)']
         
+        // ✅ CORRECCIÓN: Consulta simple SIN JOIN para evitar el error de relaciones
         const { data, error } = await supabase
           .from('asistencias')
-          .select(`
-            id,
-            fecha,
-            hora_entrada,
-            hora_salida,
-            estado,
-            tardanza_min,
-            personas (
-              nombre,
-              dni,
-              rol
-            )
-          `)
+          .select('*') 
           .gte('fecha', inicio)
           .lte('fecha', fin)
           .in('persona_id', idsFiltro)
@@ -88,30 +77,34 @@ export default function ExportarPage() {
         } else {
           console.log('✅ Asistencias encontradas:', data?.length)
           ;(data ?? []).forEach(a => {
-  const persona = Array.isArray(a.personas) ? a.personas[0] : a.personas;
-  rows.push([
-    persona?.nombre ?? '—',
-    persona?.dni ?? '—',
-    persona?.rol ?? '—',
-    a.fecha,
-    a.hora_entrada?.slice(0,5) ?? '—',
-    a.hora_salida?.slice(0,5) ?? '—',
-    a.estado,
-    a.tardanza_min ?? 0
-  ])
-})
+            // ✅ Buscamos los datos de la persona en el estado local
+            const persona = personas.find(p => p.id === a.persona_id)
+            rows.push([
+              persona?.nombre ?? '—',
+              persona?.dni ?? '—',
+              persona?.rol ?? '—',
+              a.fecha,
+              a.hora_entrada?.slice(0,5) ?? '—',
+              a.hora_salida?.slice(0,5) ?? '—',
+              a.estado,
+              a.tardanza_min ?? 0
+            ])
+          })
         }
       } else if (tipo === 'permisos') {
         headers = ['Nombre', 'DNI', 'Tipo', 'Fecha Inicio', 'Fecha Fin', 'Motivo', 'Estado']
+        // ✅ CORRECCIÓN: Consulta simple SIN JOIN
         const { data } = await supabase.from('permisos')
-          .select('*, personas(nombre,dni)')
+          .select('*')
           .gte('fecha_inicio', inicio).lte('fecha_fin', fin)
           .order('fecha_inicio')
         
         ;(data ?? []).forEach(p => {
+          // ✅ Buscamos los datos de la persona en el estado local
+          const persona = personas.find(per => per.id === p.persona_id)
           rows.push([
-            p.personas?.nombre ?? '—',
-            p.personas?.dni ?? '—',
+            persona?.nombre ?? '—',
+            persona?.dni ?? '—',
             p.tipo?.replace('_', ' '),
             p.fecha_inicio,
             p.fecha_fin,
