@@ -1,57 +1,336 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+'use client'
+import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { format, startOfWeek, addDays } from 'date-fns'
+import { es } from 'date-fns/locale'
 
-export const revalidate = 0
+export default function DashboardLogisticoPage() {
+  const supabase = createClient()
+  const hoy = format(new Date(),'yyyy-MM-dd')
+  const lunes = format(startOfWeek(new Date(),{weekStartsOn:1}),'yyyy-MM-dd')
+  const viernes = format(addDays(startOfWeek(new Date(),{weekStartsOn:1}),4),'yyyy-MM-dd')
 
-export default async function DashboardLogisticosPage() {
-  const supabase = await createClient()
-  
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const [coordinador, setCoordinador] = useState<any>(null)
+  const [personas, setPersonas] = useState<any[]>([])
+  const [asistHoy, setAsistHoy] = useState<any[]>([])
+  const [permisos, setPermisos] = useState<any[]>([])
+  const [tareas, setTareas] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const { data: perfil } = await supabase
-    .from('personas')
-    .select('*')
-    .eq('auth_id', user.id)
-    .single()
+  useEffect(()=>{load()},[])
 
-  if (!perfil) {
-    await supabase.auth.signOut()
-    redirect('/auth/login')
+  async function load(){
+    // 1. Obtener datos del coordinador logueado
+    const {  { user } } = await supabase.auth.getUser()
+    if(!user) return
+
+    const { data: coordData } = await supabase
+      .from('personas')
+      .select('*')
+      .eq('auth_id', user.id)
+      .single()
+    
+    setCoordinador(coordData)
+
+    // 2. Determinar qué grupo supervisa
+    // Francisco (DNI: 70189681) → EcoBIOTEM
+    // Otros (Pamela, Hairo) → ESAT
+    const esFrancisco = coordData?.dni === '70189681'
+    const grupoAsignado = esFrancisco ? 'EcoBIOTEM' : 'ESAT'
+    const rolFiltro = esFrancisco ? 'EcoBIOTEM' : ['Practicante','SENATI','Voluntario','Asistente']
+
+    // 3. Cargar datos del equipo asignado
+    const [p, ah, perm, tar] = await Promise.all([
+      supabase.from('personas')
+        .select('*')
+        .eq('activo', true)
+        .in('rol', Array.isArray(rolFiltro) ? rolFiltro : [rolFiltro])
+        .eq('grupo', grupoAsignado)
+        .order('nombre'),
+      supabase.from('asistencias')
+        .select('*')
+        .eq('fecha', hoy),
+      supabase.from('permisos')
+        .select('*, personas(nombre,color,rol)')
+        .eq('estado', 'pendiente')
+        .order('created_at', {ascending:false})
+        .limit(5),
+      supabase.from('tareas')
+        .select('*, personas(nombre,color)')
+        .neq('estado', 'cancelada')
+        .order('created_at', {ascending:false})
+        .limit(10),
+    ])
+
+    // 4. Filtrar asistencias solo del equipo
+    const personasIds = p.data?.map(x=>x.id) || []
+    const asistFiltrada = ah.data?.filter(a=>personasIds.includes(a.persona_id)) || []
+
+    setPersonas(p.data ?? [])
+    setAsistHoy(asistFiltrada)
+    setPermisos(perm.data ?? [])
+    setTareas(tar.data ?? [])
+    setLoading(false)
   }
 
+  // Métricas
+  const presentes = asistHoy.filter(a=>['presente','tarde'].includes(a.estado)).length
+  const tardanzas = asistHoy.filter(a=>a.estado==='tarde').length
+  const permisosPendientes = permisos.length
+  const tareasActivas = tareas.filter(t=>t.estado==='en_progreso').length
+
+  if(loading) return <div style={{padding:40,textAlign:'center',color:'#94a3b8'}}>Cargando dashboard logístico...</div>
+
   return (
-    <div style={{ padding: '24px', fontFamily: 'sans-serif', background: '#f8fafc', minHeight: '100vh' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+    <div style={{padding:'24px',fontFamily:'sans-serif',background:'#f8fafc',minHeight:'100vh'}}>
+      
+      {/* Header */}
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24,flexWrap:'wrap',gap:12}}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: 0, color: '#1e293b' }}>📦 Dashboard Logístico</h1>
-          <p style={{ color: '#64748b', margin: '4px 0 0' }}>
-            Gestión de tareas, permisos y avances del equipo
+          <h1 style={{fontSize:24,fontWeight:700,color:'#002F6C',margin:'0 0 4px'}}>Dashboard Logístico</h1>
+          <p style={{fontSize:13,color:'#64748b',margin:0}}>
+            Gestión de tareas, permisos y avances del equipo · {coordinador?.nombre}
           </p>
         </div>
-        <form action={async () => {
+        <form action={async ()=>{
           'use server'
           await supabase.auth.signOut()
-          redirect('/auth/login')
+          window.location.href='/auth/login'
         }}>
-          <button type="submit" style={{ background: '#ef4444', color: 'white', padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+          <button type="submit" style={{background:'#dc2626',color:'white',padding:'8px 16px',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600}}>
             Cerrar Sesión
           </button>
         </form>
       </div>
 
-      <div style={{ background: 'white', padding: 32, borderRadius: 12, border: '1px solid #e2e8f0', textAlign: 'center' }}>
-        <h2 style={{ marginBottom: 16 }}>Panel de Coordinación Logística</h2>
-        <p style={{ color: '#64748b', marginBottom: 24 }}>
-          Bienvenido, {perfil.nombre}
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, maxWidth: 600, margin: '0 auto' }}>
-          <div style={{ padding: 24, background: '#dbeafe', borderRadius: 12, textDecoration: 'none', color: '#1e40af', fontWeight: 'bold' }}>
-            📌 Gestionar Tareas
+      {/* Banner informativo */}
+      <div style={{
+        background: coordinador?.dni==='70189681' 
+          ? 'linear-gradient(135deg,#166534,#15803d)' 
+          : 'linear-gradient(135deg,#002F6C,#1249A0)',
+        borderRadius:14,
+        padding:'18px 24px',
+        marginBottom:20,
+        color:'white',
+        display:'flex',
+        alignItems:'center',
+        gap:16
+      }}>
+        <div style={{
+          width:44,height:44,borderRadius:10,background:'rgba(255,255,255,.15)',
+          display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0
+        }}>
+          {coordinador?.dni==='70189681' ? '🌿' : '📦'}
+        </div>
+        <div>
+          <div style={{fontSize:16,fontWeight:700}}>
+            {coordinador?.dni==='70189681' ? 'GI EcoBIOTEM' : 'ESAT-FCAM · CIAD-FCAM · UNASAM'}
           </div>
-          <div style={{ padding: 24, background: '#fef3c7', borderRadius: 12, textDecoration: 'none', color: '#92400e', fontWeight: 'bold' }}>
-            ✅ Aprobar Permisos
+          <div style={{fontSize:12,color:'rgba(255,255,255,.7)',marginTop:2}}>
+            {coordinador?.dni==='70189681' 
+              ? 'Grupo de Investigación en Biotecnología Ambiental' 
+              : 'Equipo de Asistencia Técnica · Huaraz, Áncash'}
           </div>
+        </div>
+      </div>
+
+      {/* Métricas */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14,marginBottom:20}}>
+        {[
+          {l:'Personal activo',v:personas.length,s:`${coordinador?.dni==='70189681'?'EcoBIOTEM':'ESAT'}`,i:'👥',c:'#002F6C'},
+          {l:'Presentes hoy',v:presentes,s:`de ${personas.length} esperados`,i:'✅',c:'#15803d'},
+          {l:'Tardanzas',v:tardanzas,s:'registradas hoy',i:'⏰',c:'#d97706'},
+          {l:'Permisos pendientes',v:permisosPendientes,s:'por aprobar',i:'📋',c:'#dc2626'},
+        ].map(m=>(
+          <div key={m.l} style={{
+            background:'white',borderRadius:12,padding:'16px 18px',
+            border:`1.5px solid ${m.c}22`,boxShadow:'0 1px 3px rgba(0,0,0,.06)',
+            position:'relative',overflow:'hidden'
+          }}>
+            <div style={{fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',marginBottom:6}}>{m.l}</div>
+            <div style={{fontSize:28,fontWeight:700,color:m.c,lineHeight:1}}>{m.v}</div>
+            <div style={{fontSize:11,color:'#94a3b8',marginTop:4}}>{m.s}</div>
+            <div style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:28,opacity:.15}}>{m.i}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
+        
+        {/* Estado del equipo hoy */}
+        <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+          <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:14,display:'flex',alignItems:'center',gap:8}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:'#15803d'}}/>
+            Estado del equipo hoy
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:380,overflowY:'auto'}}>
+            {personas.map(p=>{
+              const a = asistHoy.find(x=>x.persona_id===p.id)
+              const estado = a?.estado ?? 'sin_registrar'
+              const COLOR: Record<string,string> = {
+                presente:'#15803d',tarde:'#d97706',ausente:'#dc2626',
+                permiso:'#7c3aed',sin_registrar:'#94a3b8'
+              }
+              return (
+                <div key={p.id} style={{
+                  display:'flex',alignItems:'center',gap:10,
+                  padding:'8px 10px',borderRadius:9,background:'#f8fafc',
+                  border:'1px solid #e2e8f0'
+                }}>
+                  <div style={{
+                    width:32,height:32,borderRadius:'50%',background:p.color,
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    fontSize:11,fontWeight:700,color:'white',flexShrink:0
+                  }}>
+                    {p.nombre.charAt(0)}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                      {p.nombre}
+                    </div>
+                    <div style={{fontSize:10,color:'#94a3b8'}}>
+                      {p.rol} · {p.area||p.subrol||'-'}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <div style={{width:8,height:8,borderRadius:'50%',background:COLOR[estado]}}/>
+                    <span style={{fontSize:11,color:COLOR[estado],fontWeight:500}}>
+                      {a?.hora_entrada?.slice(0,5) ?? '—'}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+            {!personas.length && (
+              <div style={{textAlign:'center',padding:20,color:'#94a3b8',fontSize:13}}>
+                No hay personal asignado
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Permisos pendientes */}
+        <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+          <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <span style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{width:8,height:8,borderRadius:'50%',background:'#dc2626'}}/>
+              Permisos pendientes
+            </span>
+            <a href="/dashboard/permisos" style={{fontSize:11,color:'#002F6C',textDecoration:'none',fontWeight:500}}>
+              Ver todos →
+            </a>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {permisos.map(perm=>(
+              <div key={perm.id} style={{
+                padding:'10px 14px',background:'#fffbeb',
+                borderRadius:9,border:'1px solid #fde68a'
+              }}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                  <div style={{
+                    width:26,height:26,borderRadius:'50%',
+                    background:perm.personas?.color||'#94a3b8',
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    fontSize:10,fontWeight:700,color:'white'
+                  }}>
+                    {perm.personas?.nombre?.charAt(0)}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:600}}>{perm.personas?.nombre}</div>
+                    <div style={{fontSize:10,color:'#94a3b8'}}>{perm.personas?.rol}</div>
+                  </div>
+                </div>
+                <div style={{fontSize:11,color:'#475569',marginBottom:4}}>
+                  📅 {perm.fecha_inicio} · {perm.tipo}
+                </div>
+                {perm.motivo && (
+                  <div style={{fontSize:11,color:'#64748b',fontStyle:'italic'}}>
+                    "{perm.motivo}"
+                  </div>
+                )}
+                <div style={{display:'flex',gap:6,marginTop:8}}>
+                  <button onClick={async ()=>{
+                    await supabase.from('permisos').update({estado:'aprobado'}).eq('id',perm.id)
+                    load()
+                  }} style={{
+                    padding:'4px 10px',background:'#dcfce7',color:'#15803d',
+                    border:'1px solid #86efac',borderRadius:6,fontSize:10,
+                    cursor:'pointer',fontWeight:600
+                  }}>
+                    ✓ Aprobar
+                  </button>
+                  <button onClick={async ()=>{
+                    await supabase.from('permisos').update({estado:'rechazado'}).eq('id',perm.id)
+                    load()
+                  }} style={{
+                    padding:'4px 10px',background:'#fee2e2',color:'#b91c1c',
+                    border:'1px solid #fca5a5',borderRadius:6,fontSize:10,
+                    cursor:'pointer',fontWeight:600
+                  }}>
+                    ✗ Rechazar
+                  </button>
+                </div>
+              </div>
+            ))}
+            {!permisos.length && (
+              <div style={{textAlign:'center',padding:20,color:'#94a3b8',fontSize:13}}>
+                ✅ No hay permisos pendientes
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Tareas activas */}
+      <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+        <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <span style={{display:'flex',alignItems:'center',gap:8}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:'#d97706'}}/>
+            Tareas activas ({tareasActivas})
+          </span>
+          <a href="/dashboard/tareas" style={{fontSize:11,color:'#002F6C',textDecoration:'none',fontWeight:500}}>
+            Ver todas →
+          </a>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:10}}>
+          {tareas.slice(0,6).map(t=>(
+            <div key={t.id} style={{
+              padding:'12px',background:'#f8fafc',borderRadius:9,
+              border:'1px solid #e2e8f0'
+            }}>
+              <div style={{fontSize:12,fontWeight:600,color:'#0f172a',marginBottom:4}}>
+                {t.titulo}
+              </div>
+              <div style={{fontSize:10,color:'#64748b',marginBottom:6}}>
+                👤 {t.personas?.nombre} · 📅 {t.fecha_limite}
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <span style={{
+                  fontSize:9,padding:'2px 6px',borderRadius:12,
+                  background:t.estado==='en_progreso'?'#dbeafe':'#dcfce7',
+                  color:t.estado==='en_progreso'?'#1d4ed8':'#15803d',
+                  fontWeight:600,textTransform:'uppercase'
+                }}>
+                  {t.estado==='en_progreso'?'En progreso':'Completada'}
+                </span>
+                {t.prioridad && (
+                  <span style={{
+                    fontSize:9,padding:'2px 6px',borderRadius:12,
+                    background:t.prioridad==='alta'?'#fee2e2':'#fef3c7',
+                    color:t.prioridad==='alta'?'#b91c1c':'#b45309',
+                    fontWeight:600
+                  }}>
+                    {t.prioridad}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+          {!tareas.length && (
+            <div style={{textAlign:'center',padding:20,color:'#94a3b8',fontSize:13}}>
+              No hay tareas registradas
+            </div>
+          )}
         </div>
       </div>
     </div>
