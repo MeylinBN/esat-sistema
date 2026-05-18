@@ -15,13 +15,20 @@ const GRUPOS_HS = [
 
 function turnoCell(franjas:any[]){
   if(!franjas.length) return {bg:'#f8fafc',border:'#e2e8f0',txt:'—',detail:''}
-  const m=franjas.some(f=>parseInt(f.hora_entrada)<13)
-  const t=franjas.some(f=>parseInt(f.hora_entrada)>=13)
-  const detail=franjas.map(f=>f.hora_entrada.slice(0,5)+'–'+f.hora_salida.slice(0,5)).join('\n')
-  if(m&&t) return {bg:'#fef9c3',border:'#fde047',txt:'M+T',detail}
-  if(m)    return {bg:'#dbeafe',border:'#93c5fd',txt:'M',detail}
-  if(t)    return {bg:'#dcfce7',border:'#86efac',txt:'T',detail}
+  const m=franjas.filter(f=>parseInt(f.hora_entrada)<13)
+  const t=franjas.filter(f=>parseInt(f.hora_entrada)>=13)
+  const detail=[...m,...t].map(f=>f.hora_entrada.slice(0,5)+'–'+f.hora_salida.slice(0,5)).join('\n')
+  if(m.length>0&&t.length>0) return {bg:'#fef9c3',border:'#fde047',txt:'M+T',detail}
+  if(m.length>0) return {bg:'#dbeafe',border:'#93c5fd',txt:'M',detail}
+  if(t.length>0) return {bg:'#dcfce7',border:'#86efac',txt:'T',detail}
   return {bg:'#f8fafc',border:'#e2e8f0',txt:'—',detail:''}
+}
+
+// Helper: Retorna "Nombre + Primer Apellido"
+function nombreCorto(nombreCompleto: string | null | undefined): string {
+  if (!nombreCompleto) return ''
+  const partes = nombreCompleto.trim().split(/\s+/)
+  return partes.slice(0, 2).join(' ')
 }
 
 export default function HorariosPage(){
@@ -34,14 +41,13 @@ export default function HorariosPage(){
   const [editPerId,  setEditPerId]  = useState('')
   const [editFranjas,setEditFranjas]= useState<Record<string,{id?:string,e:string,s:string}[]>>({L:[],M:[],X:[],J:[],V:[]})
   const [saving,     setSaving]     = useState(false)
-  const [modalPerm,  setModalPerm]  = useState(false)
-  const [mpPerId,    setMpPerId]    = useState('')
-  const [mpTipo,     setMpTipo]     = useState('permiso_personal')
-  const [mpFecha,    setMpFecha]    = useState(format(new Date(),'yyyy-MM-dd'))
-  const [mpMotivo,   setMpMotivo]   = useState('')
-  const [mpDia,      setMpDia]      = useState('L')
-  const [mpEntrada,  setMpEntrada]  = useState('08:30')
-  const [mpSalida,   setMpSalida]   = useState('13:00')
+  const [modalCambio,  setModalCambio]  = useState(false)
+  const [mcPerId,    setMcPerId]    = useState('')
+  const [mcFecha,    setMcFecha]    = useState(format(new Date(),'yyyy-MM-dd'))
+  const [mcMotivo,   setMcMotivo]   = useState('')
+  const [mcDia,      setMcDia]      = useState('L')
+  const [mcEntrada,  setMcEntrada]  = useState('08:30')
+  const [mcSalida,   setMcSalida]   = useState('13:00')
 
   useEffect(()=>{load()},[])
 
@@ -83,7 +89,39 @@ export default function HorariosPage(){
     setEditFranjas(fr);setEditPerId(persona.id);setModalEdit(true)
   }
 
-  function addFranja(dia:string){setEditFranjas(p=>({...p,[dia]:[...p[dia],{e:'08:30',s:'13:00'}]}))}
+  // Agregar franja con validación: máximo 1 mañana y 1 tarde
+  function addFranja(dia:string){
+    const actuales = editFranjas[dia] || []
+    const ultimaFranja = actuales[actuales.length - 1]
+    
+    // Determinar si la última es mañana o tarde
+    let ultimaEsManana = false
+    if(ultimaFranja) {
+      ultimaEsManana = parseInt(ultimaFranja.e) < 13
+    }
+    
+    // Si ya hay 2 franjas, no permitir más
+    if(actuales.length >= 2) {
+      alert('Máximo 2 franjas por día: 1 mañana + 1 tarde')
+      return
+    }
+    
+    // Si ya hay una mañana, solo permitir tarde
+    const yaHayManana = actuales.some(f => parseInt(f.e) < 13)
+    const yaHayTarde = actuales.some(f => parseInt(f.e) >= 13)
+    
+    if(ultimaEsManana && yaHayManana) {
+      // Agregar tarde por defecto
+      setEditFranjas(p=>({...p,[dia]:[...p[dia],{e:'15:00',s:'18:00'}]}))
+    } else if(!yaHayManana) {
+      // Agregar mañana por defecto
+      setEditFranjas(p=>({...p,[dia]:[...p[dia],{e:'08:30',s:'13:00'}]}))
+    } else if(!yaHayTarde) {
+      // Agregar tarde
+      setEditFranjas(p=>({...p,[dia]:[...p[dia],{e:'15:00',s:'18:00'}]}))
+    }
+  }
+
   function delFranja(dia:string,i:number){setEditFranjas(p=>({...p,[dia]:p[dia].filter((_:any,j:number)=>j!==i)}))}
   function updFranja(dia:string,i:number,f:'e'|'s',v:string){
     setEditFranjas(p=>{const n={...p};n[dia]=n[dia].map((x:any,j:number)=>j===i?{...x,[f]:v}:x);return n})
@@ -98,20 +136,24 @@ export default function HorariosPage(){
     setSaving(false);setModalEdit(false);load()
   }
 
-  async function guardarPermiso(){
-    if(!mpPerId) return
+  // Registrar SOLO cambio de horario (no permiso)
+  async function guardarCambio(){
+    if(!mcPerId) return
     setSaving(true)
-    // Usamos la tabla permisos para todo (más simple y compatible)
+    
+    // Insertar en la tabla permisos pero con tipo 'cambio_horario'
+    // O crear una tabla separada 'cambios_horario' si existe
     await supabase.from('permisos').insert({
-      persona_id:mpPerId,
-      tipo: mpTipo==='cambio_horario' ? 'permiso_personal' : mpTipo,
-      fecha_inicio:mpFecha,
-      fecha_fin:mpFecha,
-      motivo: mpMotivo || (mpTipo==='cambio_horario' ? `Cambio horario ${mpDia}: ${mpEntrada}-${mpSalida}` : ''),
+      persona_id:mcPerId,
+      tipo: 'cambio_horario',
+      fecha_inicio:mcFecha,
+      fecha_fin:mcFecha,
+      motivo: mcMotivo || `Cambio horario ${DIAS_NM[mcDia]}: ${mcEntrada}-${mcSalida}`,
       estado:'pendiente',
-      dias_recuperacion: mpTipo==='cambio_horario' ? `${mpDia} ${mpEntrada}-${mpSalida}` : null
+      dias_recuperacion: `${DIAS_NM[mcDia]} ${mcEntrada}-${mcSalida}`
     })
-    setSaving(false);setModalPerm(false);setMpMotivo('');load()
+    
+    setSaving(false);setModalCambio(false);setMcMotivo('');load()
   }
 
   const esat=personas.filter(p=>p.grupo==='ESAT')
@@ -129,10 +171,10 @@ export default function HorariosPage(){
           <p style={{fontSize:12,color:'#94a3b8',marginTop:2}}>Horarios actualizados · Semana regular del equipo ESAT</p>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={()=>setModalPerm(true)} style={{padding:'8px 16px',background:'white',border:'1.5px solid #e2e8f0',borderRadius:9,cursor:'pointer',fontWeight:600,fontSize:13}}>
+          <button onClick={()=>window.location.href='/dashboard/permisos'} style={{padding:'8px 16px',background:'white',border:'1.5px solid #e2e8f0',borderRadius:9,cursor:'pointer',fontWeight:600,fontSize:13}}>
             📋 Ver permisos
           </button>
-          <button onClick={()=>setModalPerm(true)} style={{padding:'8px 16px',background:'#002F6C',color:'white',border:'none',borderRadius:9,cursor:'pointer',fontWeight:600,fontSize:13}}>
+          <button onClick={()=>setModalCambio(true)} style={{padding:'8px 16px',background:'#002F6C',color:'white',border:'none',borderRadius:9,cursor:'pointer',fontWeight:600,fontSize:13}}>
             + Registrar cambio
           </button>
         </div>
@@ -141,7 +183,7 @@ export default function HorariosPage(){
       {/* Leyenda */}
       <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:18,flexWrap:'wrap'}}>
         <span style={{fontSize:11,fontWeight:600,color:'#475569'}}>LEYENDA:</span>
-        {[['#dbeafe','Mañana'],['#dcfce7','Tarde'],['#fef9c3','Ambos'],['#f8fafc','Libre']].map(([bg,l])=>(
+        {[['#dbeafe','Mañana'],['#dcfce7','Tarde'],['#fef9c3','Ambos (M+T)'],['#f8fafc','Libre']].map(([bg,l])=>(
           <div key={l} style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'#475569'}}>
             <div style={{width:14,height:14,borderRadius:3,background:bg as string,border:'1px solid #e2e8f0'}}/>
             {l}
@@ -185,7 +227,7 @@ export default function HorariosPage(){
                           <div style={{display:'flex',alignItems:'center',gap:9}}>
                             <div style={{width:32,height:32,borderRadius:8,background:p.color+'25',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:13,color:p.color}}>{p.nombre.charAt(0)}</div>
                             <div>
-                              <div style={{fontSize:12,fontWeight:600}}>{p.nombre}</div>
+                              <div style={{fontSize:12,fontWeight:600}}>{nombreCorto(p.nombre)}</div>
                               <div style={{fontSize:10,color:'#94a3b8'}}>{p.subrol??p.rol}</div>
                             </div>
                           </div>
@@ -254,22 +296,28 @@ export default function HorariosPage(){
               <h3 style={{fontSize:16,fontWeight:700,margin:0}}>Editar horario — {personas.find(p=>p.id===editPerId)?.nombre}</h3>
               <button onClick={()=>setModalEdit(false)} style={{width:28,height:28,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
             </div>
-            <p style={{fontSize:12,color:'#94a3b8',marginBottom:14}}>Agrega o elimina franjas por día.</p>
+            <p style={{fontSize:12,color:'#94a3b8',marginBottom:14}}>Máximo 2 franjas por día: 1 mañana + 1 tarde</p>
             {DIAS.map(d=>(
               <div key={d} style={{marginBottom:10,padding:'10px 14px',background:'#f8fafc',borderRadius:10,border:'1px solid #e2e8f0'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:7}}>
                   <span style={{fontSize:12,fontWeight:700,color:'#002F6C'}}>{DIAS_NM[d]}</span>
-                  <button onClick={()=>addFranja(d)} style={{fontSize:11,padding:'3px 9px',borderRadius:7,border:'1px solid #93c5fd',background:'#eff6ff',color:'#1d4ed8',cursor:'pointer',fontWeight:600}}>+ Franja</button>
+                  <button onClick={()=>addFranja(d)} disabled={(editFranjas[d]||[]).length>=2} style={{fontSize:11,padding:'3px 9px',borderRadius:7,border:'1px solid #93c5fd',background:(editFranjas[d]||[]).length>=2?'#f1f5f9':'#eff6ff',color:(editFranjas[d]||[]).length>=2?'#94a3b8':'#1d4ed8',cursor:(editFranjas[d]||[]).length>=2?'not-allowed':'pointer',fontWeight:600,opacity:(editFranjas[d]||[]).length>=2?.5:1}}>
+                    + {(editFranjas[d]||[]).length===0?'Mañana':'Tarde'}
+                  </button>
                 </div>
                 {editFranjas[d].length===0&&<span style={{fontSize:11,color:'#cbd5e1'}}>Libre — sin franja</span>}
-                {editFranjas[d].map((f:any,i:number)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}>
-                    <input type="time" value={f.e} onChange={e=>updFranja(d,i,'e',e.target.value)} style={{padding:'5px 8px',border:'1.5px solid #e2e8f0',borderRadius:7,fontFamily:'inherit',fontSize:12,width:100}}/>
-                    <span style={{fontSize:11,color:'#94a3b8'}}>–</span>
-                    <input type="time" value={f.s} onChange={e=>updFranja(d,i,'s',e.target.value)} style={{padding:'5px 8px',border:'1.5px solid #e2e8f0',borderRadius:7,fontFamily:'inherit',fontSize:12,width:100}}/>
-                    <button onClick={()=>delFranja(d,i)} style={{background:'#fee2e2',border:'none',color:'#b91c1c',borderRadius:6,padding:'3px 7px',cursor:'pointer',fontSize:13}}>×</button>
-                  </div>
-                ))}
+                {editFranjas[d].map((f:any,i:number)=>{
+                  const esManana = parseInt(f.e) < 13
+                  return (
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}>
+                      <span style={{fontSize:10,color:'#94a3b8',minWidth:50,fontWeight:600}}>{esManana?'🌅 Mañana':'🌆 Tarde'}</span>
+                      <input type="time" value={f.e} onChange={e=>updFranja(d,i,'e',e.target.value)} style={{padding:'5px 8px',border:'1.5px solid #e2e8f0',borderRadius:7,fontFamily:'inherit',fontSize:12,width:100}}/>
+                      <span style={{fontSize:11,color:'#94a3b8'}}>–</span>
+                      <input type="time" value={f.s} onChange={e=>updFranja(d,i,'s',e.target.value)} style={{padding:'5px 8px',border:'1.5px solid #e2e8f0',borderRadius:7,fontFamily:'inherit',fontSize:12,width:100}}/>
+                      <button onClick={()=>delFranja(d,i)} style={{background:'#fee2e2',border:'none',color:'#b91c1c',borderRadius:6,padding:'3px 7px',cursor:'pointer',fontSize:13}}>×</button>
+                    </div>
+                  )
+                })}
               </div>
             ))}
             <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
@@ -280,62 +328,48 @@ export default function HorariosPage(){
         </div>
       )}
 
-      {/* Modal permiso/cambio */}
-      {modalPerm && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>{if(e.target===e.currentTarget)setModalPerm(false)}}>
+      {/* Modal cambio de horario */}
+      {modalCambio && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>{if(e.target===e.currentTarget)setModalCambio(false)}}>
           <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:450,boxShadow:'0 24px 80px rgba(0,0,0,.25)'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-              <h3 style={{fontSize:16,fontWeight:700,margin:0}}>Registrar cambio / permiso</h3>
-              <button onClick={()=>setModalPerm(false)} style={{width:28,height:28,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+              <h3 style={{fontSize:16,fontWeight:700,margin:0}}>Registrar cambio de horario</h3>
+              <button onClick={()=>setModalCambio(false)} style={{width:28,height:28,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
-              <div>
-                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Persona</label>
-                <select value={mpPerId} onChange={e=>setMpPerId(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
-                  <option value="">Seleccionar...</option>
-                  {personas.map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Tipo</label>
-                <select value={mpTipo} onChange={e=>setMpTipo(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
-                  <option value="permiso_personal">Permiso personal</option>
-                  <option value="permiso_medico">Permiso médico</option>
-                  <option value="permiso_academico">Permiso académico</option>
-                  <option value="falta_justificada">Falta justificada</option>
-                  <option value="cambio_horario">Cambio de horario</option>
-                </select>
-              </div>
-            </div>
-            {mpTipo==='cambio_horario' && (
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:12}}>
-                <div>
-                  <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Día</label>
-                  <select value={mpDia} onChange={e=>setMpDia(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
-                    {DIAS.map(d=><option key={d} value={d}>{DIAS_NM[d]}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Entrada</label>
-                  <input type="time" value={mpEntrada} onChange={e=>setMpEntrada(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
-                </div>
-                <div>
-                  <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Salida</label>
-                  <input type="time" value={mpSalida} onChange={e=>setMpSalida(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
-                </div>
-              </div>
-            )}
             <div style={{marginBottom:12}}>
-              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Fecha</label>
-              <input type="date" value={mpFecha} onChange={e=>setMpFecha(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Persona</label>
+              <select value={mcPerId} onChange={e=>setMcPerId(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
+                <option value="">Seleccionar...</option>
+                {personas.map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:12}}>
+              <div>
+                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Día</label>
+                <select value={mcDia} onChange={e=>setMcDia(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
+                  {DIAS.map(d=><option key={d} value={d}>{DIAS_NM[d]}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Entrada</label>
+                <input type="time" value={mcEntrada} onChange={e=>setMcEntrada(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+              </div>
+              <div>
+                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Salida</label>
+                <input type="time" value={mcSalida} onChange={e=>setMcSalida(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+              </div>
+            </div>
+            <div style={{marginBottom:12}}>
+              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Fecha del cambio</label>
+              <input type="date" value={mcFecha} onChange={e=>setMcFecha(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
             </div>
             <div style={{marginBottom:16}}>
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Motivo</label>
-              <textarea value={mpMotivo} onChange={e=>setMpMotivo(e.target.value)} rows={2} placeholder="Detalla el cambio o permiso..." style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13,resize:'vertical'}}/>
+              <textarea value={mcMotivo} onChange={e=>setMcMotivo(e.target.value)} rows={2} placeholder="Motivo del cambio de horario..." style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13,resize:'vertical'}}/>
             </div>
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-              <button onClick={()=>setModalPerm(false)} style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>Cancelar</button>
-              <button onClick={guardarPermiso} disabled={saving||!mpPerId} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mpPerId||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mpPerId||saving)?.6:1}}>{saving?'Guardando...':'Registrar'}</button>
+              <button onClick={()=>setModalCambio(false)} style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>Cancelar</button>
+              <button onClick={guardarCambio} disabled={saving||!mcPerId} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mcPerId||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mcPerId||saving)?.6:1}}>{saving?'Guardando...':'Registrar cambio'}</button>
             </div>
           </div>
         </div>
