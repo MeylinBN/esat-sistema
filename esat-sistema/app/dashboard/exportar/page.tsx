@@ -88,17 +88,18 @@ export default function ExportarPage() {
         } else {
           console.log('✅ Asistencias encontradas:', data?.length)
           ;(data ?? []).forEach(a => {
-            rows.push([
-              a.personas?.nombre ?? '—',
-              a.personas?.dni ?? '—',
-              a.personas?.rol ?? '—',
-              a.fecha,
-              a.hora_entrada?.slice(0,5) ?? '—',
-              a.hora_salida?.slice(0,5) ?? '—',
-              a.estado,
-              a.tardanza_min ?? 0
-            ])
-          })
+  const persona = Array.isArray(a.personas) ? a.personas[0] : a.personas;
+  rows.push([
+    persona?.nombre ?? '—',
+    persona?.dni ?? '—',
+    persona?.rol ?? '—',
+    a.fecha,
+    a.hora_entrada?.slice(0,5) ?? '—',
+    a.hora_salida?.slice(0,5) ?? '—',
+    a.estado,
+    a.tardanza_min ?? 0
+  ])
+})
         }
       } else if (tipo === 'permisos') {
         headers = ['Nombre', 'DNI', 'Tipo', 'Fecha Inicio', 'Fecha Fin', 'Motivo', 'Estado']
