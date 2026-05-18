@@ -61,12 +61,11 @@ export default function ExportarPage() {
     if (meses.length > 0) generarPreview() 
   }, [meses, tipo, selPersonas])
 
-  async function generarPreview() {
+   async function generarPreview() {
     if (meses.length === 0) return
     setLoading(true)
     setError(null)
     
-    // Obtener rangos de fechas para todos los meses seleccionados
     const rangos = meses.map(mes => {
       const [year, month] = mes.split('-').map(Number)
       return {
@@ -82,9 +81,9 @@ export default function ExportarPage() {
 
     try {
       if (tipo === 'asistencia') {
-        headers = ['Fecha', 'Entrada', 'Salida', 'Horas Trabajadas', 'Estado', 'Tardanza']
+        // ✅ Columnas reordenadas: Horas Trabajadas al final
+        headers = ['Fecha', 'Entrada', 'Salida', 'Estado', 'Horas Trabajadas']
         
-        // Consultar asistencias para todos los meses
         let todasAsistencias: any[] = []
         for (const rango of rangos) {
           const { data, error } = await supabase
@@ -102,63 +101,53 @@ export default function ExportarPage() {
 
         console.log('✅ Total asistencias:', todasAsistencias.length)
         
-        // Agrupar por persona
         const porPersona: Record<string, any[]> = {}
         todasAsistencias.forEach(a => {
           if (!porPersona[a.persona_id]) porPersona[a.persona_id] = []
           porPersona[a.persona_id].push(a)
         })
         
-        // Generar filas agrupadas
         let totalGeneralHoras = 0
-        let totalGeneralTardanza = 0
         
         Object.entries(porPersona).forEach(([pid, asistencias]) => {
           const p = personas.find(x => x.id === pid)
           if (!p) return
           
-          // Encabezado de persona (fila especial)
-          rows.push([` ${p.nombre}`, `DNI: ${p.dni}`, `${p.rol}`, '', '', ''])
+          // ✅ Encabezado de persona (fuera de los datos, como separador)
+          rows.push([`═══════════════════════════════════════════════════════`, '', '', '', ''])
+          rows.push([`📋 ${p.nombre}`, `DNI: ${p.dni}`, `${p.rol}`, '', ''])
+          rows.push([`─────────────────────────────────────────────────────`, '', '', '', ''])
           
           let totalHorasPersona = 0
-          let totalTardanzaPersona = 0
           
-          // Datos de asistencia
           asistencias.forEach(a => {
             const horasTrabajadas = calcularHoras(
               a.hora_entrada?.slice(0,5) ?? '',
               a.hora_salida?.slice(0,5) ?? ''
             )
             totalHorasPersona += horasTrabajadas
-            totalTardanzaPersona += (a.tardanza_min ?? 0)
+            
+            // ✅ Solo mostrar "tarde" o "presente", sin minutos de tardanza
+            const estadoTexto = a.estado === 'tarde' ? 'tarde' : a.estado
             
             rows.push([
               a.fecha,
               a.hora_entrada?.slice(0,5) ?? '—',
               a.hora_salida?.slice(0,5) ?? '—',
-              horasTrabajadas > 0 ? formatoHoras(horasTrabajadas * 60) : '—',
-              a.estado,
-              a.tardanza_min > 0 ? formatoHoras(a.tardanza_min) : '0'
+              estadoTexto,
+              horasTrabajadas > 0 ? formatoHoras(horasTrabajadas * 60) : '—'
             ])
           })
           
-          // Fila de totales por persona
           totalGeneralHoras += totalHorasPersona
-          totalGeneralTardanza += totalTardanzaPersona
-          rows.push([
-            `📊 Total ${p.nombre.split(' ')[0]}`,
-            '',
-            '',
-            formatoHoras(totalHorasPersona * 60),
-            '',
-            formatoHoras(totalTardanzaPersona)
-          ])
-          rows.push([]) // Separador
+          
+          // ✅ Total por persona
+          rows.push([`📊 Total ${p.nombre.split(' ')[0]}`, '', '', '', formatoHoras(totalHorasPersona * 60)])
+          rows.push([])
         })
         
-        // Total general
         if (Object.keys(porPersona).length > 1) {
-          rows.push([`📈 TOTAL GENERAL`, '', '', formatoHoras(totalGeneralHoras * 60), '', formatoHoras(totalGeneralTardanza)])
+          rows.push([`📈 TOTAL GENERAL`, '', '', '', formatoHoras(totalGeneralHoras * 60)])
         }
         
       } else if (tipo === 'permisos') {
@@ -180,7 +169,9 @@ export default function ExportarPage() {
         Object.entries(porPersona).forEach(([pid, permisos]) => {
           const persona = personas.find(x => x.id === pid)
           if (!persona) return
-          rows.push([`📋 ${persona.nombre}`, `DNI: ${persona.dni}`, `${persona.rol}`, '', '', ''])
+          rows.push([`═══════════════════════════════════════════════════════`, '', '', '', ''])
+          rows.push([`📋 ${persona.nombre}`, `DNI: ${persona.dni}`, `${persona.rol}`, '', ''])
+          rows.push([`─────────────────────────────────────────────────────`, '', '', '', ''])
           permisos.forEach(perm => {
             rows.push([perm.tipo?.replace('_', ' '), perm.fecha_inicio, perm.fecha_fin, perm.motivo ?? '—', perm.estado])
           })
@@ -422,19 +413,34 @@ export default function ExportarPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {dataPreview.rows.map((r, i) => {
-                    const isFirstCol = r[0]?.startsWith('📋') || r[0]?.startsWith('📊') || r[0]?.startsWith('📈')
-                    return (
-                      <tr key={i} style={{ 
-                        background: isFirstCol ? (r[0]?.startsWith('📋') ? '#eff6ff' : r[0]?.startsWith('📊') ? '#dcfce7' : '#fef3c7') : (i%2===0 ? 'white' : '#f8fafc'),
-                        fontWeight: isFirstCol ? 600 : 400
-                      }}>
-                        {r.map((cell, j) => (
-                          <td key={j} style={{ padding:'8px 12px', borderBottom:'1px solid #f1f5f9', color:'#0f172a' }}>{cell}</td>
-                        ))}
-                      </tr>
-                    )
-                  })}
+                 {dataPreview.rows.map((r, i) => {
+  const isSeparator = r[0]?.startsWith('═══')
+  const isPersonaHeader = r[0]?.startsWith('📋')
+  const isSubHeader = r[0]?.startsWith('───')
+  const isTotal = r[0]?.startsWith('📊')
+  const isGrandTotal = r[0]?.startsWith('📈')
+  
+  if (isSeparator || isSubHeader) return null // Ocultar líneas separadoras
+  
+  return (
+    <tr key={i} style={{ 
+      background: isPersonaHeader ? '#eff6ff' : isTotal ? '#dcfce7' : isGrandTotal ? '#fef3c7' : (i%2===0 ? 'white' : '#f8fafc'),
+      fontWeight: isPersonaHeader || isTotal || isGrandTotal ? 700 : 400,
+      borderBottom: isPersonaHeader ? '2px solid #002F6C' : '1px solid #f1f5f9'
+    }}>
+      {r.map((cell, j) => (
+        <td key={j} style={{ 
+          padding:'10px 12px', 
+          color:'#0f172a',
+          fontSize: isPersonaHeader ? 13 : 12,
+          borderBottom: isPersonaHeader ? '2px solid #002F6C' : '1px solid #f1f5f9'
+        }}>
+          {cell}
+        </td>
+      ))}
+    </tr>
+  )
+})}
                 </tbody>
               </table>
             ) : (
