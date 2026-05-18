@@ -16,7 +16,6 @@ const TIPOS = [
   { value:'completo',   label:'Reporte completo' },
 ]
 
-// Helper para escapar comas en CSV
 function escapeCSV(val: any) {
   const str = String(val ?? '')
   return str.includes(',') || str.includes('"') || str.includes('\n')
@@ -33,21 +32,28 @@ export default function ExportarPage() {
   const [selPersonas, setSelPersonas] = useState<string[]>([])
   const [dataPreview, setDataPreview] = useState<{headers:string[], rows:string[][]}>({headers:[], rows:[]})
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string|null>(null)
 
   useEffect(() => {
     supabase.from('personas').select('id,nombre,dni,rol,area').eq('activo', true).order('nombre')
       .then(({ data }) => setPersonas(data ?? []))
   }, [])
 
-  useEffect(() => { generarPreview() }, [mes, tipo, selPersonas])
+  useEffect(() => { 
+    if (mes) generarPreview() 
+  }, [mes, tipo, selPersonas])
 
   async function generarPreview() {
     if (!mes) return
     setLoading(true)
+    setError(null)
+    
     const [year, month] = mes.split('-').map(Number)
     const inicio = format(startOfMonth(new Date(year, month-1)), 'yyyy-MM-dd')
     const fin    = format(endOfMonth(new Date(year, month-1)), 'yyyy-MM-dd')
     const idsFiltro = selPersonas.length > 0 ? selPersonas : personas.map(p => p.id)
+
+    console.log('🔍 Exportar debug:', { mes, inicio, fin, tipo, personasFiltradas: idsFiltro.length })
 
     let headers: string[] = []
     let rows: string[][] = []
@@ -55,24 +61,45 @@ export default function ExportarPage() {
     try {
       if (tipo === 'asistencia') {
         headers = ['Nombre', 'DNI', 'Rol', 'Fecha', 'Entrada', 'Salida', 'Estado', 'Tardanza (min)']
-        const { data } = await supabase.from('asistencias')
-          .select('*, personas(nombre,dni,rol)')
-          .gte('fecha', inicio).lte('fecha', fin)
+        
+        const { data, error } = await supabase
+          .from('asistencias')
+          .select(`
+            id,
+            fecha,
+            hora_entrada,
+            hora_salida,
+            estado,
+            tardanza_min,
+            personas (
+              nombre,
+              dni,
+              rol
+            )
+          `)
+          .gte('fecha', inicio)
+          .lte('fecha', fin)
           .in('persona_id', idsFiltro)
           .order('fecha')
-        
-        ;(data ?? []).forEach(a => {
-          rows.push([
-            a.personas?.nombre ?? '—',
-            a.personas?.dni ?? '—',
-            a.personas?.rol ?? '—',
-            a.fecha,
-            a.hora_entrada?.slice(0,5) ?? '—',
-            a.hora_salida?.slice(0,5) ?? '—',
-            a.estado,
-            a.tardanza_min ?? 0
-          ])
-        })
+
+        if (error) {
+          console.error('❌ Error en consulta:', error)
+          setError(error.message)
+        } else {
+          console.log('✅ Asistencias encontradas:', data?.length)
+          ;(data ?? []).forEach(a => {
+            rows.push([
+              a.personas?.nombre ?? '—',
+              a.personas?.dni ?? '—',
+              a.personas?.rol ?? '—',
+              a.fecha,
+              a.hora_entrada?.slice(0,5) ?? '—',
+              a.hora_salida?.slice(0,5) ?? '—',
+              a.estado,
+              a.tardanza_min ?? 0
+            ])
+          })
+        }
       } else if (tipo === 'permisos') {
         headers = ['Nombre', 'DNI', 'Tipo', 'Fecha Inicio', 'Fecha Fin', 'Motivo', 'Estado']
         const { data } = await supabase.from('permisos')
@@ -98,7 +125,6 @@ export default function ExportarPage() {
         })
       } else {
         headers = ['Nombre', 'DNI', 'Rol', 'Área', 'Horas/Sem', 'Asistencias Mes', 'Permisos Mes']
-        // Consulta combinada simplificada para reporte completo
         const { data: asis } = await supabase.from('asistencias').select('persona_id').gte('fecha', inicio).lte('fecha', fin).in('persona_id', idsFiltro)
         const { data: perm } = await supabase.from('permisos').select('persona_id').gte('fecha_inicio', inicio).lte('fecha_fin', fin).in('persona_id', idsFiltro)
         const conteoAsis: Record<string, number> = {}; (asis??[]).forEach(a => conteoAsis[a.persona_id] = (conteoAsis[a.persona_id]||0)+1)
@@ -108,9 +134,12 @@ export default function ExportarPage() {
           rows.push([p.nombre, p.dni, p.rol, p.area ?? '—', p.hs_semanales ?? '0', conteoAsis[p.id]??0, conteoPerm[p.id]??0])
         })
       }
+      
+      console.log('📊 Filas generadas:', rows.length)
       setDataPreview({ headers, rows })
     } catch(err) {
-      console.error('Error generando preview:', err)
+      console.error('❌ Error generando preview:', err)
+      setError('Error al cargar datos')
       setDataPreview({ headers: ['Error'], rows: [['No se pudieron cargar los datos']] })
     } finally {
       setLoading(false)
@@ -118,12 +147,17 @@ export default function ExportarPage() {
   }
 
   async function exportar() {
+    if (dataPreview.rows.length === 0) {
+      alert('No hay datos para exportar')
+      return
+    }
+    
     setLoading(true)
     try {
       const csvContent = [dataPreview.headers.join(','), ...dataPreview.rows.map(r => r.map(escapeCSV).join(','))].join('\n')
       
       if (fmt === 'csv') {
-        const blob = new Blob(['\ufeff'+csvContent], { type: 'text/csv;charset=utf-8;' }) // BOM para Excel
+        const blob = new Blob(['\ufeff'+csvContent], { type: 'text/csv;charset=utf-8;' })
         download(blob, `ESAT_${tipo}_${mes}.csv`)
       } else if (fmt === 'excel') {
         const { utils, writeFile } = await import('xlsx')
@@ -171,6 +205,12 @@ export default function ExportarPage() {
         <h1 style={{ fontSize:22, fontWeight:700, color:'#002F6C', margin:0 }}>Exportar Reportes</h1>
         <p style={{ fontSize:13, color:'#64748b', marginTop:4 }}>Descarga datos filtrados en CSV, Excel o PDF</p>
       </div>
+
+      {error && (
+        <div style={{ background:'#fee2e2', border:'1.5px solid #fca5a5', borderRadius:10, padding:'12px 16px', marginBottom:20, color:'#b91c1c' }}>
+          ⚠️ {error}
+        </div>
+      )}
 
       <div style={{ display:'grid', gridTemplateColumns:'320px 1fr', gap:20, alignItems:'start' }}>
         
