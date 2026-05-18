@@ -43,7 +43,7 @@ export default function ExportarPage() {
     if (mes) generarPreview() 
   }, [mes, tipo, selPersonas])
 
-    async function generarPreview() {
+      async function generarPreview() {
     if (!mes) return
     setLoading(true)
     setError(null)
@@ -53,86 +53,97 @@ export default function ExportarPage() {
     const fin    = format(endOfMonth(new Date(year, month-1)), 'yyyy-MM-dd')
     const idsFiltro = selPersonas.length > 0 ? selPersonas : personas.map(p => p.id)
 
-    console.log('🔍 Exportar debug:', { mes, inicio, fin, tipo, personasFiltradas: idsFiltro.length })
-
     let headers: string[] = []
     let rows: string[][] = []
 
     try {
       if (tipo === 'asistencia') {
-        headers = ['Nombre', 'DNI', 'Rol', 'Fecha', 'Entrada', 'Salida', 'Estado', 'Tardanza (min)']
+        headers = ['Fecha', 'Entrada', 'Salida', 'Estado', 'Tardanza (min)']
         
-        // ✅ CORRECCIÓN: Consulta simple SIN JOIN para evitar el error de relaciones
         const { data, error } = await supabase
           .from('asistencias')
-          .select('*') 
+          .select('*')
           .gte('fecha', inicio)
           .lte('fecha', fin)
           .in('persona_id', idsFiltro)
+          .order('persona_id')
           .order('fecha')
 
         if (error) {
-          console.error('❌ Error en consulta:', error)
+          console.error('❌ Error:', error)
           setError(error.message)
         } else {
-          console.log('✅ Asistencias encontradas:', data?.length)
+          console.log('✅ Asistencias:', data?.length)
+          
+          // Agrupar por persona
+          const porPersona: Record<string, any[]> = {}
           ;(data ?? []).forEach(a => {
-            // ✅ Buscamos los datos de la persona en el estado local
-            const persona = personas.find(p => p.id === a.persona_id)
-            rows.push([
-              persona?.nombre ?? '—',
-              persona?.dni ?? '—',
-              persona?.rol ?? '—',
-              a.fecha,
-              a.hora_entrada?.slice(0,5) ?? '—',
-              a.hora_salida?.slice(0,5) ?? '—',
-              a.estado,
-              a.tardanza_min ?? 0
-            ])
+            if (!porPersona[a.persona_id]) porPersona[a.persona_id] = []
+            porPersona[a.persona_id].push(a)
+          })
+          
+          // Generar filas agrupadas
+          Object.entries(porPersona).forEach(([pid, asistencias]) => {
+            const p = personas.find(x => x.id === pid)
+            if (!p) return
+            
+            // Fila de encabezado de persona
+            rows.push([`📋 ${p.nombre} · DNI: ${p.dni} · ${p.rol}`, '', '', '', ''])
+            
+            // Datos de asistencia
+            asistencias.forEach(a => {
+              rows.push([
+                a.fecha,
+                a.hora_entrada?.slice(0,5) ?? '—',
+                a.hora_salida?.slice(0,5) ?? '—',
+                a.estado,
+                a.tardanza_min ?? 0
+              ])
+            })
+            rows.push([]) // Separador
           })
         }
       } else if (tipo === 'permisos') {
-        headers = ['Nombre', 'DNI', 'Tipo', 'Fecha Inicio', 'Fecha Fin', 'Motivo', 'Estado']
-        // ✅ CORRECCIÓN: Consulta simple SIN JOIN
-        const { data } = await supabase.from('permisos')
-          .select('*')
+        headers = ['Tipo', 'Fecha Inicio', 'Fecha Fin', 'Motivo', 'Estado']
+        const { data } = await supabase.from('permisos').select('*')
           .gte('fecha_inicio', inicio).lte('fecha_fin', fin)
-          .order('fecha_inicio')
+          .order('persona_id').order('fecha_inicio')
         
+        const porPersona: Record<string, any[]> = {}
         ;(data ?? []).forEach(p => {
-          // ✅ Buscamos los datos de la persona en el estado local
-          const persona = personas.find(per => per.id === p.persona_id)
-          rows.push([
-            persona?.nombre ?? '—',
-            persona?.dni ?? '—',
-            p.tipo?.replace('_', ' '),
-            p.fecha_inicio,
-            p.fecha_fin,
-            p.motivo ?? '—',
-            p.estado
-          ])
+          if (!porPersona[p.persona_id]) porPersona[p.persona_id] = []
+          porPersona[p.persona_id].push(p)
+        })
+        
+        Object.entries(porPersona).forEach(([pid, permisos]) => {
+          const persona = personas.find(x => x.id === pid)
+          if (!persona) return
+          rows.push([`📋 ${persona.nombre} · DNI: ${persona.dni} · ${persona.rol}`, '', '', '', ''])
+          permisos.forEach(perm => {
+            rows.push([perm.tipo?.replace('_', ' '), perm.fecha_inicio, perm.fecha_fin, perm.motivo ?? '—', perm.estado])
+          })
+          rows.push([])
         })
       } else if (tipo === 'horas') {
-        headers = ['Nombre', 'DNI', 'Rol', 'Horas Semanales', 'Área']
-        ;(personas.filter(p => idsFiltro.includes(p.id))).forEach(p => {
+        headers = ['Nombre', 'DNI', 'Rol', 'Horas/Sem', 'Área']
+        personas.filter(p => idsFiltro.includes(p.id)).forEach(p => {
           rows.push([p.nombre, p.dni, p.rol, p.hs_semanales ?? '0', p.area ?? '—'])
         })
       } else {
-        headers = ['Nombre', 'DNI', 'Rol', 'Área', 'Horas/Sem', 'Asistencias Mes', 'Permisos Mes']
+        headers = ['Nombre', 'DNI', 'Rol', 'Área', 'Asistencias', 'Permisos']
         const { data: asis } = await supabase.from('asistencias').select('persona_id').gte('fecha', inicio).lte('fecha', fin).in('persona_id', idsFiltro)
         const { data: perm } = await supabase.from('permisos').select('persona_id').gte('fecha_inicio', inicio).lte('fecha_fin', fin).in('persona_id', idsFiltro)
         const conteoAsis: Record<string, number> = {}; (asis??[]).forEach(a => conteoAsis[a.persona_id] = (conteoAsis[a.persona_id]||0)+1)
         const conteoPerm: Record<string, number> = {}; (perm??[]).forEach(p => conteoPerm[p.persona_id] = (conteoPerm[p.persona_id]||0)+1)
-        
         personas.filter(p => idsFiltro.includes(p.id)).forEach(p => {
-          rows.push([p.nombre, p.dni, p.rol, p.area ?? '—', p.hs_semanales ?? '0', conteoAsis[p.id]??0, conteoPerm[p.id]??0])
+          rows.push([p.nombre, p.dni, p.rol, p.area ?? '—', conteoAsis[p.id]??0, conteoPerm[p.id]??0])
         })
       }
       
-      console.log('📊 Filas generadas:', rows.length)
+      console.log('📊 Filas:', rows.length)
       setDataPreview({ headers, rows })
     } catch(err) {
-      console.error('❌ Error generando preview:', err)
+      console.error('❌ Error:', err)
       setError('Error al cargar datos')
       setDataPreview({ headers: ['Error'], rows: [['No se pudieron cargar los datos']] })
     } finally {
@@ -148,14 +159,30 @@ export default function ExportarPage() {
     
     setLoading(true)
     try {
-      const csvContent = [dataPreview.headers.join(','), ...dataPreview.rows.map(r => r.map(escapeCSV).join(','))].join('\n')
+      // Generar CSV con el formato agrupado
+      const csvLines = [
+        `REPORTE DE ${tipo.toUpperCase()} · MES: ${mes}`,
+        `Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`,
+        '',
+        dataPreview.headers.join(','),
+        ...dataPreview.rows.map(r => r.map(escapeCSV).join(','))
+      ]
+      const csvContent = csvLines.join('\n')
       
       if (fmt === 'csv') {
         const blob = new Blob(['\ufeff'+csvContent], { type: 'text/csv;charset=utf-8;' })
         download(blob, `ESAT_${tipo}_${mes}.csv`)
       } else if (fmt === 'excel') {
         const { utils, writeFile } = await import('xlsx')
-        const ws = utils.aoa_to_sheet([dataPreview.headers, ...dataPreview.rows])
+        const ws = utils.aoa_to_sheet([
+          [`REPORTE DE ${tipo.toUpperCase()} · MES: ${mes}`],
+          [`Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`],
+          [''],
+          dataPreview.headers,
+          ...dataPreview.rows
+        ])
+        // Ancho de columnas
+        ws['!cols'] = dataPreview.headers.map(() => ({ wch: 18 }))
         const wb = utils.book_new()
         utils.book_append_sheet(wb, ws, 'Reporte')
         writeFile(wb, `ESAT_${tipo}_${mes}.xlsx`)
@@ -163,20 +190,36 @@ export default function ExportarPage() {
         const { default: jsPDF } = await import('jspdf')
         const { default: autoTable } = await import('jspdf-autotable')
         const doc = new jsPDF({ orientation: 'landscape' })
-        doc.setFontSize(14)
-        doc.text(`ESAT · CIAD — Reporte de ${tipo} | ${mes}`, 14, 16)
+        
+        doc.setFontSize(16)
+        doc.setTextColor(0, 47, 108)
+        doc.text(`REPORTE DE ${tipo.toUpperCase()}`, 14, 18)
+        doc.setFontSize(10)
+        doc.setTextColor(100, 116, 139)
+        doc.text(`Mes: ${mes} | Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 24)
+        
         autoTable(doc, { 
           head: [dataPreview.headers], 
           body: dataPreview.rows, 
-          startY: 24, 
+          startY: 30, 
           styles: { fontSize: 8, cellPadding: 2 },
-          headStyles: { fillColor: [0, 47, 108] } 
+          headStyles: { fillColor: [0, 47, 108] },
+          // Colorear filas de encabezado de persona
+          didParseCell: (data) => {
+            const rowText = data.row.raw[0] || ''
+            if (rowText.startsWith('📋 ')) {
+              data.cell.styles.fontStyle = 'bold'
+              data.cell.styles.fillColor = [239, 246, 255]
+              data.cell.styles.textColor = [0, 47, 108]
+              data.cell.styles.fontSize = 10
+            }
+          }
         })
         doc.save(`ESAT_${tipo}_${mes}.pdf`)
       }
     } catch(err) {
       console.error('Error exportando:', err)
-      alert('Error al generar el archivo. Verifica la consola.')
+      alert('Error al generar el archivo.')
     } finally {
       setLoading(false)
     }
