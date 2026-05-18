@@ -205,15 +205,14 @@ export default function ExportarPage() {
           styles: { fontSize: 8, cellPadding: 2 },
           headStyles: { fillColor: [0, 47, 108] },
           // Colorear filas de encabezado de persona
-          didParseCell: (data) => {
-            const rowText = data.row.raw[0] || ''
-            if (rowText.startsWith('📋 ')) {
-              data.cell.styles.fontStyle = 'bold'
-              data.cell.styles.fillColor = [239, 246, 255]
-              data.cell.styles.textColor = [0, 47, 108]
-              data.cell.styles.fontSize = 10
-            }
-          }
+          didParseCell: (data: any) => {
+  const rowText = (data.row.raw as any[])?.[0] || ''
+  if (rowText && rowText.startsWith('📋 ')) {
+    data.cell.styles.fontStyle = 'bold'
+    data.cell.styles.fillColor = [239, 246, 255]
+    data.cell.styles.textColor = [0, 47, 108]
+  }
+}
         })
         doc.save(`ESAT_${tipo}_${mes}.pdf`)
       }
