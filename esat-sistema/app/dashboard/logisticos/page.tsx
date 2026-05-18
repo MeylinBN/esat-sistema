@@ -92,15 +92,15 @@ export default function DashboardLogisticoPage() {
             Gestión de tareas, permisos y avances del equipo · {coordinador?.nombre}
           </p>
         </div>
-        <form action={async ()=>{
-          'use server'
-          await supabase.auth.signOut()
-          window.location.href='/auth/login'
-        }}>
-          <button type="submit" style={{background:'#dc2626',color:'white',padding:'8px 16px',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600}}>
-            Cerrar Sesión
-          </button>
-        </form>
+       <button onClick={async ()=>{
+  await supabase.auth.signOut()
+  window.location.href='/auth/login'
+}} style={{
+  background:'#dc2626',color:'white',padding:'8px 16px',
+  border:'none',borderRadius:8,cursor:'pointer',fontWeight:600
+}}>
+  Cerrar Sesión
+</button>
       </div>
 
       {/* Banner informativo */}
