@@ -21,7 +21,7 @@ export default function DashboardLogisticoPage() {
 
   async function load(){
     // 1. Obtener datos del coordinador logueado
-    const {  { user } } = await supabase.auth.getUser()
+   const { data: { user } } = await supabase.auth.getUser()
     if(!user) return
 
     const { data: coordData } = await supabase
