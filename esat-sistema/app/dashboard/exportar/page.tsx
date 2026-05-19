@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { format, startOfMonth, endOfMonth, parse } from 'date-fns'
+import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 const MESES = Array.from({ length: 12 }, (_, i) => ({
@@ -23,7 +23,6 @@ function escapeCSV(val: any) {
     : str
 }
 
-// Calcular horas entre dos tiempos (HH:MM)
 function calcularHoras(entrada: string, salida: string): number {
   if (!entrada || !salida) return 0
   const [hE, mE] = entrada.split(':').map(Number)
@@ -32,7 +31,6 @@ function calcularHoras(entrada: string, salida: string): number {
   return minutos > 0 ? minutos / 60 : 0
 }
 
-// Formatear minutos a "X Hr Y Min"
 function formatoHoras(minutos: number): string {
   const hrs = Math.floor(minutos / 60)
   const mins = Math.round(minutos % 60)
@@ -47,21 +45,43 @@ export default function ExportarPage() {
   const [tipo, setTipo] = useState('asistencia')
   const [fmt, setFmt] = useState<'csv'|'excel'|'pdf'>('csv')
   const [personas, setPersonas] = useState<any[]>([])
+  const [horarios, setHorarios] = useState<any[]>([])
   const [selPersonas, setSelPersonas] = useState<string[]>([])
   const [dataPreview, setDataPreview] = useState<{headers:string[], rows:string[][]}>({headers:[], rows:[]})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string|null>(null)
 
   useEffect(() => {
-    supabase.from('personas').select('id,nombre,dni,rol,area').eq('activo', true).order('nombre')
-      .then(({ data }) => setPersonas(data ?? []))
+    Promise.all([
+      supabase.from('personas').select('id,nombre,dni,rol,area').eq('activo', true).order('nombre'),
+      supabase.from('horarios').select('*')
+    ]).then(([p, h]) => {
+      setPersonas(p.data ?? [])
+      setHorarios(h.data ?? [])
+    })
   }, [])
 
   useEffect(() => { 
     if (meses.length > 0) generarPreview() 
   }, [meses, tipo, selPersonas])
 
-   async function generarPreview() {
+  function tieneDobleTurno(personaId: string): boolean {
+    const franjas = horarios.filter(h => h.persona_id === personaId)
+    const manana = franjas.some(f => parseInt(f.hora_entrada) < 13)
+    const tarde = franjas.some(f => parseInt(f.hora_entrada) >= 13)
+    return manana && tarde
+  }
+
+  function getResumenTurno(personaId: string): string {
+    const tieneDT = tieneDobleTurno(personaId)
+    if (tieneDT) return 'Doble Turno'
+    const franjas = horarios.filter(h => h.persona_id === personaId)
+    if (franjas.length === 0) return 'Sin horario'
+    const esManana = franjas.some(f => parseInt(f.hora_entrada) < 13)
+    return esManana ? 'Turno Mañana' : 'Turno Tarde'
+  }
+
+  async function generarPreview() {
     if (meses.length === 0) return
     setLoading(true)
     setError(null)
@@ -75,13 +95,11 @@ export default function ExportarPage() {
     })
 
     const idsFiltro = selPersonas.length > 0 ? selPersonas : personas.map(p => p.id)
-
     let headers: string[] = []
     let rows: string[][] = []
 
     try {
       if (tipo === 'asistencia') {
-        // ✅ Columnas reordenadas: Horas Trabajadas al final
         headers = ['Fecha', 'Entrada', 'Salida', 'Estado', 'Horas Trabajadas']
         
         let todasAsistencias: any[] = []
@@ -113,9 +131,10 @@ export default function ExportarPage() {
           const p = personas.find(x => x.id === pid)
           if (!p) return
           
-          // ✅ Encabezado de persona (fuera de los datos, como separador)
+          const turnoInfo = getResumenTurno(pid)
+          
           rows.push([`═══════════════════════════════════════════════════════`, '', '', '', ''])
-          rows.push([`📋 ${p.nombre}`, `DNI: ${p.dni}`, `${p.rol}`, '', ''])
+          rows.push([`📋 ${p.nombre}`, `DNI: ${p.dni}`, `${p.rol} · ${turnoInfo}`, '', ''])
           rows.push([`─────────────────────────────────────────────────────`, '', '', '', ''])
           
           let totalHorasPersona = 0
@@ -127,7 +146,6 @@ export default function ExportarPage() {
             )
             totalHorasPersona += horasTrabajadas
             
-            // ✅ Solo mostrar "tarde" o "presente", sin minutos de tardanza
             const estadoTexto = a.estado === 'tarde' ? 'tarde' : a.estado
             
             rows.push([
@@ -140,8 +158,6 @@ export default function ExportarPage() {
           })
           
           totalGeneralHoras += totalHorasPersona
-          
-          // ✅ Total por persona
           rows.push([`📊 Total ${p.nombre.split(' ')[0]}`, '', '', '', formatoHoras(totalHorasPersona * 60)])
           rows.push([])
         })
@@ -230,7 +246,7 @@ export default function ExportarPage() {
       
       if (fmt === 'csv') {
         const blob = new Blob(['\ufeff'+csvContent], { type: 'text/csv;charset=utf-8;' })
-        download(blob, `ESAT_${tipo}_${meses.length===1?meses[0]:'multiple'}.${fmt}`)
+        download(blob, `ESAT_${tipo}_${meses.length===1?meses[0]:'multiple'}.csv`)
       } else if (fmt === 'excel') {
         const { utils, writeFile } = await import('xlsx')
         const ws = utils.aoa_to_sheet([
@@ -247,40 +263,63 @@ export default function ExportarPage() {
       } else if (fmt === 'pdf') {
         const { default: jsPDF } = await import('jspdf')
         const { default: autoTable } = await import('jspdf-autotable')
-        const doc = new jsPDF({ orientation: 'landscape' })
+        
+        const doc = new jsPDF({ 
+          orientation: 'landscape',
+          unit: 'mm',
+          format: 'a4',
+          compress: true
+        })
         
         doc.setFontSize(16)
         doc.setTextColor(0, 47, 108)
         doc.text(`REPORTE DE ${tipo.toUpperCase()}`, 14, 18)
+        
         doc.setFontSize(10)
         doc.setTextColor(100, 116, 139)
         doc.text(`${mesesTexto} | Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 24)
         
+        const rowsParaPDF = dataPreview.rows.filter(r => {
+          return !r[0]?.includes('═══') && !r[0]?.includes('───')
+        })
+        
         autoTable(doc, { 
           head: [dataPreview.headers], 
-          body: dataPreview.rows, 
+          body: rowsParaPDF,
           startY: 30, 
-          styles: { fontSize: 8, cellPadding: 2 },
-          headStyles: { fillColor: [0, 47, 108] },
+          styles: { 
+            fontSize: 9, 
+            cellPadding: 3,
+            font: 'helvetica',
+            overflow: 'linebreak'
+          },
+          headStyles: { 
+            fillColor: [0, 47, 108],
+            textColor: 255,
+            fontStyle: 'bold',
+            fontSize: 10
+          },
+          alternateRowStyles: {
+            fillColor: [248, 250, 252]
+          },
           didParseCell: (data: any) => {
-            const rowText = (data.row.raw as any[])?.[0] || ''
-            if (rowText && rowText.startsWith('📋 ')) {
+            const cellText = data.cell.text.join(' ')
+            if (cellText.includes('📋')) {
               data.cell.styles.fontStyle = 'bold'
               data.cell.styles.fillColor = [239, 246, 255]
               data.cell.styles.textColor = [0, 47, 108]
-              data.cell.styles.fontSize = 10
-            } else if (rowText && rowText.startsWith('📊 Total')) {
+              data.cell.styles.fontSize = 11
+            } else if (cellText.includes('📊 Total')) {
               data.cell.styles.fontStyle = 'bold'
               data.cell.styles.fillColor = [220, 252, 231]
               data.cell.styles.textColor = [21, 128, 61]
-            } else if (rowText && rowText.startsWith('📈 TOTAL')) {
-              data.cell.styles.fontStyle = 'bold'
-              data.cell.styles.fillColor = [254, 243, 199]
-              data.cell.styles.textColor = [180, 83, 9]
             }
-          }
+          },
+          margin: { top: 30, bottom: 20 }
         })
-        doc.save(`ESAT_${tipo}_${meses.length===1?meses[0]:'multiple'}.pdf`)
+        
+        const nombreArchivo = `ESAT_${tipo}_${meses.length===1?meses[0]:'multiple'}.pdf`
+        doc.save(nombreArchivo)
       }
     } catch(err) {
       console.error('Error exportando:', err)
@@ -320,10 +359,8 @@ export default function ExportarPage() {
 
       <div style={{ display:'grid', gridTemplateColumns:'320px 1fr', gap:20, alignItems:'start' }}>
         
-        {/* Panel de Controles */}
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           
-          {/* 1. Meses (Múltiple) */}
           <div style={{ background:'white', borderRadius:12, border:'1.5px solid #e2e8f0', padding:16 }}>
             <div style={{ fontSize:12, fontWeight:600, color:'#475569', marginBottom:10, textTransform:'uppercase' }}>1. Meses (puede seleccionar varios)</div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6 }}>
@@ -345,7 +382,6 @@ export default function ExportarPage() {
             )}
           </div>
 
-          {/* 2. Tipo */}
           <div style={{ background:'white', borderRadius:12, border:'1.5px solid #e2e8f0', padding:16 }}>
             <div style={{ fontSize:12, fontWeight:600, color:'#475569', marginBottom:10, textTransform:'uppercase' }}>2. Tipo de Reporte</div>
             {TIPOS.map(t => (
@@ -357,7 +393,6 @@ export default function ExportarPage() {
             ))}
           </div>
 
-          {/* 3. Personas */}
           <div style={{ background:'white', borderRadius:12, border:'1.5px solid #e2e8f0', padding:16 }}>
             <div style={{ fontSize:12, fontWeight:600, color:'#475569', marginBottom:10, textTransform:'uppercase' }}>3. Personas ({selPersonas.length === 0 ? 'Todas' : selPersonas.length})</div>
             <div style={{ display:'flex', flexWrap:'wrap', gap:6, maxHeight:140, overflowY:'auto', padding:4 }}>
@@ -373,7 +408,6 @@ export default function ExportarPage() {
             </div>
           </div>
 
-          {/* 4. Formato & Botón */}
           <div style={{ background:'white', borderRadius:12, border:'1.5px solid #e2e8f0', padding:16 }}>
             <div style={{ fontSize:12, fontWeight:600, color:'#475569', marginBottom:10, textTransform:'uppercase' }}>4. Formato</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:16 }}>
@@ -396,7 +430,6 @@ export default function ExportarPage() {
           </div>
         </div>
 
-        {/* Vista Previa */}
         <div style={{ background:'white', borderRadius:12, border:'1.5px solid #e2e8f0', overflow:'hidden' }}>
           <div style={{ padding:'14px 20px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', gap:8 }}>
             <div style={{ width:8, height:8, borderRadius:'50%', background:'#d97706' }}/>
@@ -413,34 +446,34 @@ export default function ExportarPage() {
                   </tr>
                 </thead>
                 <tbody>
-                 {dataPreview.rows.map((r, i) => {
-  const isSeparator = r[0]?.startsWith('═══')
-  const isPersonaHeader = r[0]?.startsWith('📋')
-  const isSubHeader = r[0]?.startsWith('───')
-  const isTotal = r[0]?.startsWith('📊')
-  const isGrandTotal = r[0]?.startsWith('📈')
-  
-  if (isSeparator || isSubHeader) return null // Ocultar líneas separadoras
-  
-  return (
-    <tr key={i} style={{ 
-      background: isPersonaHeader ? '#eff6ff' : isTotal ? '#dcfce7' : isGrandTotal ? '#fef3c7' : (i%2===0 ? 'white' : '#f8fafc'),
-      fontWeight: isPersonaHeader || isTotal || isGrandTotal ? 700 : 400,
-      borderBottom: isPersonaHeader ? '2px solid #002F6C' : '1px solid #f1f5f9'
-    }}>
-      {r.map((cell, j) => (
-        <td key={j} style={{ 
-          padding:'10px 12px', 
-          color:'#0f172a',
-          fontSize: isPersonaHeader ? 13 : 12,
-          borderBottom: isPersonaHeader ? '2px solid #002F6C' : '1px solid #f1f5f9'
-        }}>
-          {cell}
-        </td>
-      ))}
-    </tr>
-  )
-})}
+                  {dataPreview.rows.map((r, i) => {
+                    const isSeparator = r[0]?.startsWith('═══')
+                    const isPersonaHeader = r[0]?.startsWith('📋')
+                    const isSubHeader = r[0]?.startsWith('───')
+                    const isTotal = r[0]?.startsWith('📊')
+                    const isGrandTotal = r[0]?.startsWith('📈')
+                    
+                    if (isSeparator || isSubHeader) return null
+                    
+                    return (
+                      <tr key={i} style={{ 
+                        background: isPersonaHeader ? '#eff6ff' : isTotal ? '#dcfce7' : isGrandTotal ? '#fef3c7' : (i%2===0 ? 'white' : '#f8fafc'),
+                        fontWeight: isPersonaHeader || isTotal || isGrandTotal ? 700 : 400,
+                        borderBottom: isPersonaHeader ? '2px solid #002F6C' : '1px solid #f1f5f9'
+                      }}>
+                        {r.map((cell, j) => (
+                          <td key={j} style={{ 
+                            padding:'10px 12px', 
+                            color:'#0f172a',
+                            fontSize: isPersonaHeader ? 13 : 12,
+                            borderBottom: isPersonaHeader ? '2px solid #002F6C' : '1px solid #f1f5f9'
+                          }}>
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             ) : (
