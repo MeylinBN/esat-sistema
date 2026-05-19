@@ -44,8 +44,6 @@ export default function AsistenciaPage() {
   const [modal, setModal]             = useState(false)
   const [mPerId, setMPerId]           = useState('')
   const [mTipo, setMTipo]             = useState<'entrada'|'salida'>('entrada')
-  const [mHora, setMHora]             = useState(format(new Date(),'HH:mm'))
-  const [mEstado, setMEstado]         = useState('presente')
   const [mObs, setMObs]               = useState('')
   const [saving, setSaving]           = useState(false)
   const [verLista, setVerLista]       = useState(false)
@@ -74,30 +72,43 @@ export default function AsistenciaPage() {
   async function guardar(){
     if(!mPerId){return}
     setSaving(true)
-    const hora = mHora+':00'
+    
+    // ✅ HORA AUTOMÁTICA DEL SISTEMA
+    const ahora = format(new Date(),'HH:mm:ss')
+    
     const asist = getA(mPerId)
     const persona = personas.find(p=>p.id===mPerId)
     let tard=0
+    
     if(persona?.hora_ingreso&&mTipo==='entrada'){
       const [hE,mE]=persona.hora_ingreso.split(':').map(Number)
-      const [hR,mR]=mHora.split(':').map(Number)
+      const [hR,mR]=ahora.split(':').map(Number)
       tard=Math.max(0,(hR*60+mR)-(hE*60+mE)-(persona.tolerancia??10))
     }
+    
     if(!asist){
-      const estado = mEstado!=='presente' ? mEstado : tard>0?'tarde':'presente'
+      const estado = mTipo==='entrada' ? (tard>0?'tarde':'presente') : 'presente'
       await supabase.from('asistencias').insert({
         persona_id:mPerId,fecha:hoy,
-        hora_entrada:mTipo==='entrada'?hora:null,
-        hora_salida:mTipo==='salida'?hora:null,
+        hora_entrada:mTipo==='entrada'?ahora:null,
+        hora_salida:mTipo==='salida'?ahora:null,
         estado,tardanza_min:tard,observacion:mObs||null
       })
     } else {
       const upd:any={observacion:mObs||asist.observacion}
-      if(mTipo==='entrada'){upd.hora_entrada=hora;if(tard>0)upd.estado='tarde'}
-      else upd.hora_salida=hora
+      if(mTipo==='entrada'){
+        upd.hora_entrada=ahora
+        if(tard>0) upd.estado='tarde'
+      } else {
+        upd.hora_salida=ahora
+      }
       await supabase.from('asistencias').update(upd).eq('id',asist.id)
     }
-    setModal(false);setMObs('');setSaving(false);load()
+    
+    setModal(false)
+    setMObs('')
+    setSaving(false)
+    load()
   }
 
   const esat  = personas.filter(p=>p.grupo==='ESAT')
@@ -118,7 +129,7 @@ export default function AsistenciaPage() {
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           <button onClick={()=>setVerLista(!verLista)} style={{padding:'8px 16px',background:'white',border:'1.5px solid #e2e8f0',borderRadius:8,cursor:'pointer',fontWeight:600}}>{verLista?'Ver tarjetas':'Ver lista completa'}</button>
-          <button onClick={()=>{setModal(true);setMHora(format(new Date(),'HH:mm'))}} style={{padding:'8px 16px',background:'#002F6C',color:'white',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600}}>+ Registrar</button>
+          <button onClick={()=>{setMPerId('');setModal(true)}} style={{padding:'8px 16px',background:'#002F6C',color:'white',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600}}>+ Registrar</button>
         </div>
       </div>
 
@@ -153,12 +164,10 @@ export default function AsistenciaPage() {
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:12}}>
                   {gpersonas.map(p=>{
-                    // CORRECCIÓN: Obtener TODOS los registros del día para esta persona
                     const asistPersona = asistencias.filter(a => a.persona_id === p.id)
-                    const asist1 = asistPersona[0] // Mañana (asumido)
-                    const asist2 = asistPersona[1] // Tarde (si existe)
+                    const asist1 = asistPersona[0]
+                    const asist2 = asistPersona[1]
                     
-                    // Determinar el estado más relevante (si una es tarde, mostramos tarde)
                     const estado = asistPersona.length > 0 
                       ? (asistPersona.some(a => a.estado === 'tarde') ? 'tarde' : asistPersona[0].estado)
                       : 'sin_registrar'
@@ -169,26 +178,22 @@ export default function AsistenciaPage() {
                     const tAct = tareasActivas(p.id)
 
                     return (
-                      <div key={p.id} onClick={()=>{setMPerId(p.id);setModal(true);setMHora(format(new Date(),'HH:mm'))}}
+                      <div key={p.id} onClick={()=>{setMPerId(p.id);setModal(true)}}
                         style={{background:cfg.bg,border:`1.5px solid ${cfg.border}`,borderRadius:12,padding:14,cursor:'pointer',transition:'all .2s',position:'relative'}}
                         onMouseEnter={e=>(e.currentTarget as any).style.boxShadow='0 4px 16px rgba(0,0,0,.1)'}
                         onMouseLeave={e=>(e.currentTarget as any).style.boxShadow=''}>
                         
-                        {/* BADGE - Se mantiene absolute pero ahora el contenido de abajo tendrá padding */}
                         <span style={{position:'absolute',top:10,right:10,padding:'2px 8px',borderRadius:20,fontSize:9,fontWeight:700,background:cfg.pill,color:cfg.ptxt}}>
                           {cfg.label}
                         </span>
 
                         <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:8, paddingRight: '65px'}}> 
-                          {/* ^^^ AQUÍ ESTÁ LA CLAVE: paddingRight de 65px deja espacio para el badge ^^^ */}
-                          
                           <div style={{width:38,height:38,borderRadius:'50%',background:p.color,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:14,color:'white',flexShrink:0,position:'relative'}}>
                             {p.nombre.charAt(0)}
                             <div style={{position:'absolute',inset:-2,borderRadius:'50%',border:`2px solid ${cfg.border}`}}/>
                           </div>
                           
                           <div style={{flex:1,minWidth:0}}>
-                            {/* El truncamiento funcionará ahora gracias al padding de arriba */}
                             <div style={{fontSize:12,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.nombre}</div>
                             <div style={{fontSize:9,color:'#94a3b8',marginTop:1}}>
                               {p.rol==='SENATI'?`Prac. SENATI · ${p.subrol}`:p.rol==='Practicante'?`Prac. UNASAM · ${p.subrol}`:p.rol}
@@ -196,12 +201,10 @@ export default function AsistenciaPage() {
                           </div>
                         </div>
 
-                        {/* DATOS - Ahora soporta doble turno */}
                         <div style={{borderTop:'1px solid rgba(0,0,0,.06)',paddingTop:8,display:'flex',justifyContent:'space-between'}}>
                           <div style={{textAlign:'center', flex: 1}}>
                             <div style={{fontSize:9,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.04em'}}>ENTRADA</div>
                             <div style={{fontSize:11,fontWeight:700,color:'#0f172a'}}>{asist1?.hora_entrada?.slice(0,5) ?? '—'}</div>
-                            {/* Si hay segundo registro, lo mostramos debajo en chiquito */}
                             {asist2 && <div style={{fontSize:9, color:'#64748b',marginTop:2}}>{asist2.hora_entrada?.slice(0,5)}</div>}
                           </div>
                           <div style={{textAlign:'center', flex: 1}}>
@@ -289,7 +292,7 @@ export default function AsistenciaPage() {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Modal SIMPLIFICADO - Sin reloj manual */}
       {modal&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>{if(e.target===e.currentTarget)setModal(false)}}>
           <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:400,boxShadow:'0 24px 80px rgba(0,0,0,.25)'}}>
@@ -297,44 +300,67 @@ export default function AsistenciaPage() {
               <h3 style={{fontSize:16,fontWeight:700,margin:0}}>Registrar asistencia</h3>
               <button onClick={()=>setModal(false)} style={{width:28,height:28,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
             </div>
-            <div style={{marginBottom:12}}>
+            
+            <div style={{marginBottom:16}}>
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Persona</label>
               <select value={mPerId} onChange={e=>setMPerId(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
                 <option value="">Seleccionar...</option>
                 {personas.map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
-              <div>
-                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Tipo</label>
-                <select value={mTipo} onChange={e=>setMTipo(e.target.value as any)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
-                  <option value="entrada">Entrada</option>
-                  <option value="salida">Salida</option>
-                </select>
-              </div>
-              <div>
-                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Hora</label>
-                <input type="time" value={mHora} onChange={e=>setMHora(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+            
+            <div style={{marginBottom:16}}>
+              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Tipo de registro</label>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                <button 
+                  onClick={()=>setMTipo('entrada')}
+                  style={{
+                    padding:'12px',
+                    background:mTipo==='entrada'?'#15803d':'white',
+                    color:mTipo==='entrada'?'white':'#475569',
+                    border:`2px solid ${mTipo==='entrada'?'#15803d':'#e2e8f0'}`,
+                    borderRadius:10,
+                    cursor:'pointer',
+                    fontWeight:600,
+                    fontSize:13,
+                    transition:'all .2s'
+                  }}>
+                  ✅ Marcar Entrada
+                </button>
+                <button 
+                  onClick={()=>setMTipo('salida')}
+                  style={{
+                    padding:'12px',
+                    background:mTipo==='salida'?'#dc2626':'white',
+                    color:mTipo==='salida'?'white':'#475569',
+                    border:`2px solid ${mTipo==='salida'?'#dc2626':'#e2e8f0'}`,
+                    borderRadius:10,
+                    cursor:'pointer',
+                    fontWeight:600,
+                    fontSize:13,
+                    transition:'all .2s'
+                  }}>
+                  🚪 Marcar Salida
+                </button>
               </div>
             </div>
-            <div style={{marginBottom:12}}>
-              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Estado</label>
-              <select value={mEstado} onChange={e=>setMEstado(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
-                <option value="presente">Presente</option>
-                <option value="tarde">Tardanza</option>
-                <option value="ausente">Ausente</option>
-                <option value="permiso">Permiso</option>
-                <option value="falta_justificada">Falta justificada</option>
-                <option value="falta_injustificada">Falta injustificada</option>
-              </select>
-            </div>
+            
             <div style={{marginBottom:16}}>
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Observación (opcional)</label>
-              <input type="text" value={mObs} onChange={e=>setMObs(e.target.value)} placeholder="Ej: llegó por problemas de transporte" style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+              <input type="text" value={mObs} onChange={e=>setMObs(e.target.value)} placeholder="Ej: llegó tarde por transporte" style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
             </div>
+            
+            <div style={{background:'#f0f9ff',border:'1px solid #bae6fd',borderRadius:9,padding:'10px 12px',marginBottom:16}}>
+              <div style={{fontSize:11,color:'#0369a1'}}>
+                ⏰ <strong>Hora automática:</strong> {format(new Date(),'HH:mm:ss')}
+              </div>
+            </div>
+            
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <button onClick={()=>setModal(false)} style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>Cancelar</button>
-              <button onClick={guardar} disabled={saving||!mPerId} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mPerId||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mPerId||saving)?.6:1}}>{saving?'Guardando...':'Guardar'}</button>
+              <button onClick={guardar} disabled={saving||!mPerId} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mPerId||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mPerId||saving)?.6:1}}>
+                {saving?'Guardando...':'Confirmar'}
+              </button>
             </div>
           </div>
         </div>

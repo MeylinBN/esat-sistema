@@ -29,7 +29,6 @@ export default function LoginPage() {
       return
     }
 
-    // Redirección exitosa
     window.location.href = '/dashboard'
   }
 
@@ -40,52 +39,39 @@ export default function LoginPage() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '24px',
-      position: 'relative'
+      padding: '24px'
     }}>
-      {/* Botón Atrás */}
-      <button
-        onClick={() => router.push('/')}
-        style={{
-          position: 'absolute',
-          top: 24,
-          left: 24,
-          background: 'rgba(255,255,255,.15)',
-          border: '1px solid rgba(255,255,255,.25)',
-          borderRadius: 10,
-          padding: '10px 16px',
-          color: 'white',
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          backdropFilter: 'blur(10px)',
-          transition: 'all .2s',
-          zIndex: 10
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'rgba(255,255,255,.25)'
-          e.currentTarget.style.transform = 'translateX(-3px)'
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'rgba(255,255,255,.15)'
-          e.currentTarget.style.transform = 'translateX(0)'
-        }}
-      >
-        ← Volver
-      </button>
-
       <div style={{
         background: 'rgba(255,255,255,.97)',
         borderRadius: 20,
         padding: '32px 28px',
         width: '100%',
-        maxWidth: 380,
-        boxShadow: '0 32px 80px rgba(0,0,0,.35)',
-        marginTop: 40
+        maxWidth: 420,
+        boxShadow: '0 32px 80px rgba(0,0,0,.35)'
       }}>
+        {/* Botón Volver - DENTRO de la tarjeta */}
+        <button
+          onClick={() => router.push('/')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            background: 'transparent',
+            border: 'none',
+            color: '#64748b',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+            marginBottom: 20,
+            padding: '6px 0',
+            transition: 'color .2s'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#002F6C'}
+          onMouseLeave={(e) => e.currentTarget.style.color = '#64748b'}
+        >
+          ← Volver a opciones
+        </button>
+
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>🔐</div>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: '#002F6C', margin: 0 }}>
