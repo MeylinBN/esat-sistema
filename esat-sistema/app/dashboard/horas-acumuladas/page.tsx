@@ -1,145 +1,230 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { format, startOfMonth, endOfMonth } from 'date-fns'
+import { format, parseISO } from 'date-fns'
+import { es } from 'date-fns/locale'
 
 export default function HorasAcumuladasPage() {
   const supabase = createClient()
-  const [personas,    setPersonas]    = useState<any[]>([])
+  const [personas, setPersonas] = useState<any[]>([])
   const [asistencias, setAsistencias] = useState<any[]>([])
-  const [sesiones,    setSesiones]    = useState<any[]>([])
-  const [loading,     setLoading]     = useState(true)
-  const [mes,         setMes]         = useState(format(new Date(),'yyyy-MM'))
+  const [horarios, setHorarios] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filtroGrupo, setFiltroGrupo] = useState<'todos'|'ESAT'|'EcoBIOTEM'>('todos')
+  const [personaSel, setPersonaSel] = useState<string>('')
+  const [mesSel, setMesSel] = useState(format(new Date(), 'yyyy-MM'))
 
-  useEffect(()=>{load()},[mes])
+  useEffect(() => {
+    load()
+  }, [])
 
-  async function load(){
-    setLoading(true)
-    const [year,month]=mes.split('-').map(Number)
-    const ini=format(startOfMonth(new Date(year,month-1)),'yyyy-MM-dd')
-    const fin=format(endOfMonth(new Date(year,month-1)),'yyyy-MM-dd')
-    const [p,a,s]=await Promise.all([
-      supabase.from('personas').select('*').eq('activo',true).order('nombre'),
-      supabase.from('asistencias').select('*').gte('fecha',ini).lte('fecha',fin),
-      supabase.from('sesiones_eco').select('*').gte('fecha',ini).lte('fecha',fin),
+  async function load() {
+    const [p, a, h] = await Promise.all([
+      supabase.from('personas').select('id,nombre,color,rol,grupo,subrol').eq('activo', true).order('nombre'),
+      supabase.from('asistencias').select('*').order('fecha', { ascending: false }),
+      supabase.from('horarios').select('*'),
     ])
-    setPersonas(p.data??[]);setAsistencias(a.data??[]);setSesiones(s.data??[])
+    setPersonas(p.data ?? [])
+    setAsistencias(a.data ?? [])
+    setHorarios(h.data ?? [])
     setLoading(false)
   }
 
-  function horasPersona(pid:string){
-    return asistencias.filter(a=>a.persona_id===pid&&a.hora_entrada&&a.hora_salida).reduce((acc,a)=>{
-      const [he,me]=a.hora_entrada.split(':').map(Number)
-      const [hs,ms]=a.hora_salida.split(':').map(Number)
-      const diff=((hs*60+ms)-(he*60+me))/60
-      return acc+(diff>0?diff:0)
-    },0)
+  function calcularHorasDia(entrada: string, salida: string): number {
+    if (!entrada || !salida) return 0
+    const [hE, mE] = entrada.split(':').map(Number)
+    const [hS, mS] = salida.split(':').map(Number)
+    const minutos = (hS * 60 + mS) - (hE * 60 + mE)
+    return minutos > 0 ? minutos / 60 : 0
   }
 
-  function horasEco(pid:string){
-    return sesiones.filter(s=>s.persona_id===pid&&s.minutos).reduce((acc,s)=>acc+s.minutos/60,0)
+  function formatoHoras(horas: number): string {
+    const h = Math.floor(horas)
+    const m = Math.round((horas - h) * 60)
+    return `${h}h ${m}min`
   }
 
-  function diasPersona(pid:string){
-    return asistencias.filter(a=>a.persona_id===pid&&['presente','tarde'].includes(a.estado)).length
+  // Filtrar personas por grupo
+  const personasFiltradas = personas.filter(p => {
+    if (filtroGrupo === 'todos') return true
+    return p.grupo === filtroGrupo
+  })
+
+  // Obtener asistencias del mes seleccionado
+  const [year, month] = mesSel.split('-').map(Number)
+  const asistenciasMes = asistencias.filter(a => {
+    const fecha = parseISO(a.fecha)
+    return fecha.getFullYear() === year && fecha.getMonth() + 1 === month &&
+           (personaSel ? a.persona_id === personaSel : true)
+  })
+
+  // Agrupar por persona
+  const porPersona: Record<string, any[]> = {}
+  asistenciasMes.forEach(a => {
+    if (!porPersona[a.persona_id]) porPersona[a.persona_id] = []
+    porPersona[a.persona_id].push(a)
+  })
+
+  // Calcular totales
+  const stats = {
+    totalPersonas: Object.keys(porPersona).length,
+    totalHoras: Object.values(porPersona).flat().reduce((acc: number, a: any) => 
+      acc + calcularHorasDia(a.hora_entrada?.slice(0,5), a.hora_salida?.slice(0,5)), 0
+    ),
+    ecoBIOTEM: personas.filter(p => p.grupo === 'EcoBIOTEM' && porPersona[p.id]).length
   }
 
-  const esat=personas.filter(p=>p.grupo==='ESAT')
-  const eco =personas.filter(p=>p.grupo==='EcoBIOTEM')
-  const meses=Array.from({length:12},(_,i)=>({v:`2026-${String(i+1).padStart(2,'0')}`,l:['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][i]}))
-
-  if(loading) return <div style={{padding:40,textAlign:'center',color:'#94a3b8'}}>Cargando horas...</div>
+  if (loading) return <div style={{ padding:40, textAlign:'center', color:'#94a3b8' }}>Cargando...</div>
 
   return (
-    <div>
-      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:22,flexWrap:'wrap',gap:12}}>
-        <div>
-          <h1 style={{fontFamily:'Lora,serif',fontSize:24,color:'#002F6C',fontWeight:600}}>Horas Acumuladas</h1>
-          <p style={{fontSize:12,color:'#475569',marginTop:3}}>Horas trabajadas registradas en asistencia</p>
-        </div>
-        <select value={mes} onChange={e=>setMes(e.target.value)} style={{padding:'8px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontSize:13,fontFamily:'inherit'}}>
-          {meses.map(m=><option key={m.v} value={m.v}>{m.l} 2026</option>)}
+    <div style={{ padding:24, fontFamily:'sans-serif', background:'#f8fafc', minHeight:'100vh' }}>
+      
+      {/* Header */}
+      <div style={{ marginBottom:24 }}>
+        <h1 style={{ fontSize:22, fontWeight:700, color:'#002F6C', margin:0 }}>Horas Acumuladas</h1>
+        <p style={{ fontSize:13, color:'#64748b', marginTop:4 }}>Seguimiento de horas trabajadas por integrante</p>
+      </div>
+
+      {/* Filtros */}
+      <div style={{ display:'flex', gap:12, marginBottom:20, flexWrap:'wrap' }}>
+        <select value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value as any)}
+          style={{ padding:'8px 12px', border:'1.5px solid #e2e8f0', borderRadius:9, fontSize:13, fontFamily:'inherit' }}>
+          <option value="todos">Todos los grupos</option>
+          <option value="ESAT">ESAT</option>
+          <option value="EcoBIOTEM">EcoBIOTEM</option>
+        </select>
+
+        <select value={mesSel} onChange={e => setMesSel(e.target.value)}
+          style={{ padding:'8px 12px', border:'1.5px solid #e2e8f0', borderRadius:9, fontSize:13, fontFamily:'inherit' }}>
+          {Array.from({ length: 12 }, (_, i) => {
+            const val = format(new Date(2026, i, 1), 'yyyy-MM')
+            const label = format(new Date(2026, i, 1), 'MMMM yyyy', { locale: es })
+            return <option key={val} value={val}>{label}</option>
+          })}
+        </select>
+
+        <select value={personaSel} onChange={e => setPersonaSel(e.target.value)}
+          style={{ padding:'8px 12px', border:'1.5px solid #e2e8f0', borderRadius:9, fontSize:13, fontFamily:'inherit' }}>
+          <option value="">Todas las personas</option>
+          {personasFiltradas.map(p => (
+            <option key={p.id} value={p.id}>{p.nombre}</option>
+          ))}
         </select>
       </div>
 
-      {/* ESAT */}
-      <h2 style={{fontSize:13,fontWeight:600,color:'#475569',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:12}}>Equipo ESAT</h2>
-      <div className="card" style={{marginBottom:24}}>
-        <div className="card-body">
-          <div style={{overflowX:'auto'}}>
-            <table style={{width:'100%',borderCollapse:'collapse'}}>
-              <thead>
-                <tr style={{background:'#f8fafc'}}>
-                  {['Persona','Rol','Días asistidos','Horas registradas','Horas esperadas','Cumplimiento'].map(h=>(
-                    <th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:600,color:'#475569',textTransform:'uppercase',borderBottom:'2px solid #e2e8f0'}}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {esat.map((p,i)=>{
-                  const hr=horasPersona(p.id)
-                  const dias=diasPersona(p.id)
-                  const esperadas=(p.hs_semanales??0)*4
-                  const pct=esperadas>0?Math.min(150,Math.round(hr/esperadas*100)):0
-                  const color=pct>=90?'#15803d':pct>=70?'#d97706':'#b91c1c'
-                  return (
-                    <tr key={p.id} style={{background:i%2===0?'white':'#f8fafc'}}>
-                      <td style={{padding:'10px 14px',borderBottom:'1px solid #e2e8f0'}}>
-                        <div style={{display:'flex',alignItems:'center',gap:8}}>
-                          <div style={{width:28,height:28,borderRadius:'50%',background:p.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'white'}}>{p.nombre.charAt(0)}</div>
-                          <span style={{fontSize:12,fontWeight:600}}>{p.nombre}</span>
-                        </div>
-                      </td>
-                      <td style={{padding:'10px 14px',borderBottom:'1px solid #e2e8f0',fontSize:11,color:'#94a3b8'}}>{p.rol==='SENATI'?`SENATI`:p.rol}</td>
-                      <td style={{padding:'10px 14px',borderBottom:'1px solid #e2e8f0',fontSize:12,fontWeight:600,textAlign:'center'}}>{dias}</td>
-                      <td style={{padding:'10px 14px',borderBottom:'1px solid #e2e8f0',fontSize:12,fontWeight:700,color:'#002F6C',textAlign:'center'}}>{hr.toFixed(1)}h</td>
-                      <td style={{padding:'10px 14px',borderBottom:'1px solid #e2e8f0',fontSize:12,color:'#94a3b8',textAlign:'center'}}>{esperadas.toFixed(0)}h</td>
-                      <td style={{padding:'10px 14px',borderBottom:'1px solid #e2e8f0'}}>
-                        <div style={{display:'flex',alignItems:'center',gap:8}}>
-                          <div style={{flex:1,height:6,background:'#e2e8f0',borderRadius:10,overflow:'hidden'}}>
-                            <div style={{height:'100%',width:`${Math.min(100,pct)}%`,background:color,borderRadius:10}}/>
-                          </div>
-                          <span style={{fontSize:11,fontWeight:700,color,minWidth:36}}>{pct}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+      {/* Stats */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14, marginBottom:20 }}>
+        <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #e2e8f0' }}>
+          <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>Personas activas</div>
+          <div style={{ fontSize:28, fontWeight:700, color:'#002F6C' }}>{stats.totalPersonas}</div>
+        </div>
+        <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #e2e8f0' }}>
+          <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>Total horas mes</div>
+          <div style={{ fontSize:28, fontWeight:700, color:'#15803d' }}>{formatoHoras(stats.totalHoras)}</div>
+        </div>
+        <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #166534' }}>
+          <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>EcoBIOTEM</div>
+          <div style={{ fontSize:28, fontWeight:700, color:'#166534' }}>{stats.ecoBIOTEM} miembros</div>
         </div>
       </div>
 
-      {/* EcoBIOTEM */}
-      {eco.length>0&&(
-        <>
-          <h2 style={{fontSize:13,fontWeight:600,color:'#15803d',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:12}}>🌿 GI EcoBIOTEM</h2>
-          <div className="card">
-            <div className="card-body">
-              <p style={{fontSize:13,color:'#475569',marginBottom:14}}>Horas registradas via temporizador de sesión. Sin horario fijo.</p>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10}}>
-                {eco.map(p=>{
-                  const hr=horasEco(p.id)
-                  const ss=sesiones.filter(s=>s.persona_id===p.id&&s.minutos)
-                  return (
-                    <div key={p.id} style={{padding:'12px 14px',background:'#f0fdf4',borderRadius:10,border:'1px solid #86efac'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-                        <div style={{width:30,height:30,borderRadius:'50%',background:p.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'white'}}>{p.nombre.charAt(0)}</div>
-                        <div style={{fontSize:12,fontWeight:600}}>{p.nombre}</div>
-                      </div>
-                      <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#475569'}}>
-                        <span>Sesiones: {ss.length}</span>
-                        <span style={{fontWeight:700,color:'#15803d'}}>{hr.toFixed(1)}h</span>
-                      </div>
+      {/* Lista de personas con horas */}
+      <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+        {personasFiltradas
+          .filter(p => porPersona[p.id])
+          .map(p => {
+            const asistenciasPersona = porPersona[p.id] || []
+            const totalHorasPersona = asistenciasPersona.reduce((acc: number, a: any) => 
+              acc + calcularHorasDia(a.hora_entrada?.slice(0,5), a.hora_salida?.slice(0,5)), 0
+            )
+
+            return (
+              <div key={p.id} style={{ 
+                background:'white', borderRadius:12, border:`2px solid ${p.grupo==='EcoBIOTEM'?'#166534':'#e2e8f0'}`, 
+                overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,.06)' 
+              }}>
+                {/* Header persona */}
+                <div style={{ 
+                  padding:'14px 20px', background: p.grupo==='EcoBIOTEM' ? '#f0fdf4' : '#f8fafc',
+                  borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', gap:12 
+                }}>
+                  <div style={{ 
+                    width:40, height:40, borderRadius:'50%', background:p.color,
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    fontWeight:700, fontSize:15, color:'white' 
+                  }}>
+                    {p.nombre.charAt(0)}
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:14, fontWeight:600 }}>{p.nombre}</div>
+                    <div style={{ fontSize:11, color:'#94a3b8' }}>
+                      {p.rol} {p.subrol ? `· ${p.subrol}` : ''} · {p.grupo}
                     </div>
-                  )
-                })}
+                  </div>
+                  <div style={{ textAlign:'right' }}>
+                    <div style={{ fontSize:24, fontWeight:700, color: p.grupo==='EcoBIOTEM' ? '#166534' : '#002F6C' }}>
+                      {formatoHoras(totalHorasPersona)}
+                    </div>
+                    <div style={{ fontSize:10, color:'#94a3b8', textTransform:'uppercase' }}>Total mes</div>
+                  </div>
+                </div>
+
+                {/* Tabla de días */}
+                <div style={{ padding:'12px 20px' }}>
+                  <table style={{ width:'100%', fontSize:12 }}>
+                    <thead>
+                      <tr style={{ borderBottom:'1.5px solid #e2e8f0' }}>
+                        <th style={{ padding:'8px', textAlign:'left', fontWeight:600, color:'#475569' }}>Fecha</th>
+                        <th style={{ padding:'8px', textAlign:'center', fontWeight:600, color:'#475569' }}>Entrada</th>
+                        <th style={{ padding:'8px', textAlign:'center', fontWeight:600, color:'#475569' }}>Salida</th>
+                        <th style={{ padding:'8px', textAlign:'center', fontWeight:600, color:'#475569' }}>Horas</th>
+                        <th style={{ padding:'8px', textAlign:'center', fontWeight:600, color:'#475569' }}>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {asistenciasPersona
+                        .sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+                        .map((a, i) => {
+                          const horas = calcularHorasDia(a.hora_entrada?.slice(0,5), a.hora_salida?.slice(0,5))
+                          return (
+                            <tr key={i} style={{ borderBottom:'1px solid #f1f5f9' }}>
+                              <td style={{ padding:'8px', color:'#0f172a' }}>
+                                {format(parseISO(a.fecha), 'EEE d MMM', { locale: es })}
+                              </td>
+                              <td style={{ padding:'8px', textAlign:'center', color:'#475569' }}>
+                                {a.hora_entrada?.slice(0,5) || '—'}
+                              </td>
+                              <td style={{ padding:'8px', textAlign:'center', color:'#475569' }}>
+                                {a.hora_salida?.slice(0,5) || '—'}
+                              </td>
+                              <td style={{ padding:'8px', textAlign:'center', fontWeight:600, color:'#002F6C' }}>
+                                {horas > 0 ? formatoHoras(horas) : '—'}
+                              </td>
+                              <td style={{ padding:'8px', textAlign:'center' }}>
+                                <span style={{ 
+                                  padding:'3px 8px', borderRadius:12, fontSize:10, fontWeight:600,
+                                  background: a.estado==='tarde' ? '#fef3c7' : '#dcfce7',
+                                  color: a.estado==='tarde' ? '#b45309' : '#15803d'
+                                }}>
+                                  {a.estado}
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            )
+        })}
+
+        {Object.keys(porPersona).length === 0 && (
+          <div style={{ textAlign:'center', padding:40, color:'#94a3b8', fontSize:13 }}>
+            No hay asistencias registradas en {format(new Date(year, month-1), 'MMMM yyyy', { locale: es })}
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   )
 }
