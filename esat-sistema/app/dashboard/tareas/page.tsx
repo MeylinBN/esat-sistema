@@ -117,7 +117,7 @@ export default function TareasPage() {
   function abrirEditar(t:any){
     setEditando(t);setMTitulo(t.titulo);setMDesc(t.descripcion??'');setMPerId(t.persona_id);setMPrio(t.prioridad)
     setMFecha(t.fecha_limite??'');setMHoras(t.horas_estimadas?.toString()??'');setMSemana(t.semana??'')
-    setMAsig(t.asignado_por??usuarioActual?.nombre||'');setMComent(t.comentario??'');setModal(true)
+    setMAsig(t.asignado_por || usuarioActual?.nombre || '');setMComent(t.comentario??'');setModal(true)
   }
 
   async function guardar(){
