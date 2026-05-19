@@ -26,9 +26,8 @@ export default function TareasPage() {
   const [vista,    setVista]      = useState<'lista'|'persona'>('lista')
   const [fPer,     setFPer]       = useState('')
   const [fEst,     setFEst]       = useState('')
-const [usuarioActual, setUsuarioActual] = useState<any>(null)
+  const [usuarioActual, setUsuarioActual] = useState<any>(null)
   
-  // Modal asignar/editar
   const [modal,    setModal]      = useState(false)
   const [editando, setEditando]   = useState<any>(null)
   const [mTitulo,  setMTitulo]    = useState('')
@@ -42,40 +41,58 @@ const [usuarioActual, setUsuarioActual] = useState<any>(null)
   const [mComent,  setMComent]    = useState('')
   const [saving,   setSaving]     = useState(false)
   
-  // Modal avance
   const [modalAv,  setModalAv]    = useState(false)
   const [mAvTarea, setMAvTarea]   = useState<any>(null)
   const [mAvPct,   setMAvPct]     = useState(0)
   const [mAvSem,   setMAvSem]     = useState('')
 
-useEffect(() => {
-  async function cargarUsuario() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      const { data: userData } = await supabase
-        .from('personas')
-        .select('nombre')
-        .eq('auth_id', user.id)
-        .single()
-      setUsuarioActual(userData)
-      if (userData) setMAsig(userData.nombre) // Auto-llenar
+  useEffect(()=>{
+    load()
+  },[])
+
+  useEffect(() => {
+    async function cargarUsuario() {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        if (userError || !user) return
+        
+        const { data: userData, error: dataError } = await supabase
+          .from('personas')
+          .select('nombre')
+          .eq('auth_id', user.id)
+          .single()
+          
+        if (dataError) return
+        
+        setUsuarioActual(userData)
+        if (userData) setMAsig(userData.nombre)
+      } catch (err) {
+        console.error('Error cargando usuario:', err)
+      }
     }
-  }
-  cargarUsuario()
-}, [])
-
-
+    cargarUsuario()
+  }, [])
 
   async function load(){
-    const [p,t,a] = await Promise.all([
-      supabase.from('personas').select('id,nombre,color,rol,subrol').eq('activo',true).order('nombre'),
-      supabase.from('tareas').select('*,personas(id,nombre,color)').order('created_at',{ascending:false}),
-      supabase.from('avances_semanales').select('*').order('semana'),
-    ])
-    setPersonas(p.data??[])
-    setTareas(t.data??[])
-    setAvances(a.data??[])
-    setLoading(false)
+    try {
+      const [p,t,a] = await Promise.all([
+        supabase.from('personas').select('id,nombre,color,rol,subrol').eq('activo',true).order('nombre'),
+        supabase.from('tareas').select('*,personas(id,nombre,color)').order('created_at',{ascending:false}),
+        supabase.from('avances_semanales').select('*').order('semana'),
+      ])
+      
+      if (p.error) throw p.error
+      if (t.error) throw t.error
+      if (a.error) throw a.error
+      
+      setPersonas(p.data??[])
+      setTareas(t.data??[])
+      setAvances(a.data??[])
+    } catch (err) {
+      console.error('Error loading data:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function avancesTarea(tid:string){return avances.filter(a=>a.tarea_id===tid).sort((a,b)=>b.semana.localeCompare(a.semana))}
@@ -94,13 +111,13 @@ useEffect(() => {
 
   function abrirNuevo(){
     setEditando(null);setMTitulo('');setMDesc('');setMPerId('');setMPrio('media')
-    setMFecha('');setMHoras('');setMSemana('');setMAsig('');setMComent('');setModal(true)
+    setMFecha('');setMHoras('');setMSemana('');setMAsig(usuarioActual?.nombre||'');setMComent('');setModal(true)
   }
 
   function abrirEditar(t:any){
     setEditando(t);setMTitulo(t.titulo);setMDesc(t.descripcion??'');setMPerId(t.persona_id);setMPrio(t.prioridad)
     setMFecha(t.fecha_limite??'');setMHoras(t.horas_estimadas?.toString()??'');setMSemana(t.semana??'')
-    setMAsig(t.asignado_por??'');setMComent(t.comentario??'');setModal(true)
+    setMAsig(t.asignado_por??usuarioActual?.nombre||'');setMComent(t.comentario??'');setModal(true)
   }
 
   async function guardar(){
@@ -200,7 +217,6 @@ useEffect(() => {
                         {t.asignado_por&&<span>👨‍ {t.asignado_por}</span>}
                       </div>
                       
-                      {/* Barra de avance visual mejorada */}
                       {ua && (
                         <div style={{marginTop:10,background:'#f8fafc',borderRadius:8,padding:'8px 10px',border:'1px solid #e2e8f0'}}>
                           <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'#475569',marginBottom:4,fontWeight:600}}>
@@ -243,7 +259,6 @@ useEffect(() => {
           </div>
         </>
       ) : (
-        /* Vista por persona */
         <div style={{display:'flex',flexDirection:'column',gap:16}}>
           {porPersona.map(p=>{
             const enProg=p.tareasP.filter((t:any)=>t.estado==='en_progreso').length

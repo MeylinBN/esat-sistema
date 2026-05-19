@@ -37,24 +37,38 @@ function NavLink({href,icon,label}:{href:string,icon:string,label:string}){
 
 export default function Sidebar(){
   const router=useRouter()
+  const pathname = usePathname()
   const supabase=createClient()
   const [usuario, setUsuario] = useState<any>(null)
   
   useEffect(() => {
     async function cargarUsuario() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const {  data:userData } = await supabase
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        if (userError || !user) {
+          console.error('Error obteniendo usuario:', userError)
+          return
+        }
+        
+        const {  userData, error: dataError } = await supabase
           .from('personas')
           .select('nombre, rol')
           .eq('auth_id', user.id)
           .single()
+          
+        if (dataError) {
+          console.error('Error obteniendo datos:', dataError)
+          return
+        }
+        
         setUsuario(userData)
+      } catch (err) {
+        console.error('Error en cargarUsuario:', err)
       }
     }
     cargarUsuario()
-  }, [supabase])
-  
+  }, []) // ← Sin dependencias para evitar re-renders
+
   async function logout(){await supabase.auth.signOut();router.push('/auth/login')}
 
   return (

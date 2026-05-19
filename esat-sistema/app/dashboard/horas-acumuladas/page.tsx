@@ -14,24 +14,32 @@ export default function HorasAcumuladasPage() {
   const [personaSel, setPersonaSel] = useState<string>('')
   const [mesSel, setMesSel] = useState(format(new Date(), 'yyyy-MM'))
 
- useEffect(() => {
-  supabase.from('personas')
-    .select('id,nombre,color,rol,grupo,subrol')
-    .eq('activo', true)  // ← AGREGA ESTO
-    .order('nombre')
-    .then(({ data }) => setPersonas(data ?? []))
-}, [])
+  // ✅ ÚNICO useEffect que carga todos los datos
+  useEffect(() => {
+    load()
+  }, [])
 
   async function load() {
-    const [p, a, h] = await Promise.all([
-      supabase.from('personas').select('id,nombre,color,rol,grupo,subrol').eq('activo', true).order('nombre'),
-      supabase.from('asistencias').select('*').order('fecha', { ascending: false }),
-      supabase.from('horarios').select('*'),
-    ])
-    setPersonas(p.data ?? [])
-    setAsistencias(a.data ?? [])
-    setHorarios(h.data ?? [])
-    setLoading(false)
+    try {
+      const [p, a, h] = await Promise.all([
+        supabase.from('personas').select('id,nombre,color,rol,grupo,subrol').eq('activo', true).order('nombre'),
+        supabase.from('asistencias').select('*').order('fecha', { ascending: false }),
+        supabase.from('horarios').select('*'),
+      ])
+      
+      // ✅ Manejo de errores
+      if (p.error) throw p.error
+      if (a.error) throw a.error
+      if (h.error) throw h.error
+      
+      setPersonas(p.data ?? [])
+      setAsistencias(a.data ?? [])
+      setHorarios(h.data ?? [])
+    } catch (err) {
+      console.error('Error cargando datos:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function calcularHorasDia(entrada: string, salida: string): number {
@@ -78,7 +86,7 @@ export default function HorasAcumuladasPage() {
     ecoBIOTEM: personas.filter(p => p.grupo === 'EcoBIOTEM' && porPersona[p.id]).length
   }
 
-  if (loading) return <div style={{ padding:40, textAlign:'center', color:'#94a3b8' }}>Cargando...</div>
+  if (loading) return <div style={{ padding:40, textAlign:'center', color:'#94a3b8' }}>Cargando horas acumuladas...</div>
 
   return (
     <div style={{ padding:24, fontFamily:'sans-serif', background:'#f8fafc', minHeight:'100vh' }}>
