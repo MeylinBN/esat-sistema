@@ -26,6 +26,7 @@ export default function TareasPage() {
   const [vista,    setVista]      = useState<'lista'|'persona'>('lista')
   const [fPer,     setFPer]       = useState('')
   const [fEst,     setFEst]       = useState('')
+const [usuarioActual, setUsuarioActual] = useState<any>(null)
   
   // Modal asignar/editar
   const [modal,    setModal]      = useState(false)
@@ -47,7 +48,23 @@ export default function TareasPage() {
   const [mAvPct,   setMAvPct]     = useState(0)
   const [mAvSem,   setMAvSem]     = useState('')
 
-  useEffect(()=>{load()},[])
+useEffect(() => {
+  async function cargarUsuario() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: userData } = await supabase
+        .from('personas')
+        .select('nombre')
+        .eq('auth_id', user.id)
+        .single()
+      setUsuarioActual(userData)
+      if (userData) setMAsig(userData.nombre) // Auto-llenar
+    }
+  }
+  cargarUsuario()
+}, [])
+
+
 
   async function load(){
     const [p,t,a] = await Promise.all([

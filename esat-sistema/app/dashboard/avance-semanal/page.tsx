@@ -24,7 +24,8 @@ export default function AvanceSemanalPage() {
 
   async function load(){
     const [p,t,a] = await Promise.all([
-      supabase.from('personas').select('id,nombre,color,rol,subrol').eq('activo',true).order('nombre'),
+      // En la función load():
+supabase.from('personas').select('id,nombre,color,rol,subrol').eq('activo',true).order('nombre'),
       supabase.from('tareas').select('*,personas(nombre,color)').neq('estado','cancelada').order('created_at',{ascending:false}),
       supabase.from('avances_semanales').select('*').order('semana',{ascending:false}),
     ])

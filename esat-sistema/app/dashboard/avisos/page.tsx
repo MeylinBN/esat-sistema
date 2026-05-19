@@ -126,53 +126,81 @@ export default function AvisosPage() {
         </div>
 
         {/* Calendario */}
-        <div className="card" style={{position:'sticky',top:24}}>
-          <div className="card-body">
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
-              <span style={{fontWeight:700,fontSize:13,color:'#002F6C'}}>● Calendario</span>
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
-                <button onClick={()=>{if(mesVer===0){setMesVer(11);setAnioVer(anioVer-1)}else setMesVer(mesVer-1)}} style={{background:'none',border:'none',cursor:'pointer',fontSize:16,color:'#94a3b8'}}>‹</button>
-                <span style={{fontSize:12,fontWeight:600,textTransform:'capitalize'}}>{MESES[mesVer]} {anioVer}</span>
-                <button onClick={()=>{if(mesVer===11){setMesVer(0);setAnioVer(anioVer+1)}else setMesVer(mesVer+1)}} style={{background:'none',border:'none',cursor:'pointer',fontSize:16,color:'#94a3b8'}}>›</button>
-              </div>
-            </div>
-            {/* Leyenda */}
-            <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap'}}>
-              {[['#dbeafe','Horario'],['#f3e8ff','Permiso'],['#fee2e2','Urgente'],['#dcfce7','Anuncio']].map(([c,l])=>(
-                <div key={l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:'#475569'}}>
-                  <div style={{width:10,height:10,borderRadius:2,background:c as string}}/>
-                  {l}
-                </div>
-              ))}
-            </div>
-            {/* Días semana */}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
-              {['L','M','M','J','V','S','D'].map((d,i)=>(
-                <div key={i} style={{textAlign:'center',fontSize:10,fontWeight:600,color:'#94a3b8',padding:'4px 0'}}>{d}</div>
-              ))}
-            </div>
-            {/* Días */}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
-              {Array.from({length:(primerDia===0?6:primerDia-1)}).map((_,i)=><div key={`e${i}`}/>)}
-              {Array.from({length:diasEnMes}).map((_,i)=>{
-                const dia=i+1
-                const avisosD=avisosDelDia(dia)
-                const esHoy=new Date().getDate()===dia&&new Date().getMonth()===mesVer&&new Date().getFullYear()===anioVer
-                const tipoColor=avisosD.length>0?(TIPO_CFG[avisosD[0].tipo]?.bg??'#f3e8ff'):undefined
-                return (
-                  <div key={dia} title={avisosD.map(a=>a.titulo).join('\n')}
-                    style={{textAlign:'center',padding:'5px 2px',borderRadius:6,fontSize:12,fontWeight:esHoy?700:400,
-                      background:esHoy?'#002F6C':tipoColor??'transparent',
-                      color:esHoy?'white':avisosD.length>0?TIPO_CFG[avisosD[0].tipo]?.txt??'#374151':'#374151',
-                      cursor:avisosD.length>0?'help':'default',minHeight:28,display:'flex',alignItems:'center',justifyContent:'center',
-                      border:esHoy?'none':'1px solid transparent'}}>
-                    {dia}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+        {/* Calendario */}
+<div className="card" style={{position:'sticky',top:24}}>
+  <div className="card-body">
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+      <span style={{fontWeight:700,fontSize:13,color:'#002F6C'}}>● Calendario</span>
+      <div style={{display:'flex',alignItems:'center',gap:6}}>
+        <button onClick={()=>{if(mesVer===0){setMesVer(11);setAnioVer(anioVer-1)}else setMesVer(mesVer-1)}} style={{background:'none',border:'none',cursor:'pointer',fontSize:16,color:'#94a3b8'}}>‹</button>
+        <span style={{fontSize:12,fontWeight:600,textTransform:'capitalize'}}>{MESES[mesVer]} {anioVer}</span>
+        <button onClick={()=>{if(mesVer===11){setMesVer(0);setAnioVer(anioVer+1)}else setMesVer(mesVer+1)}} style={{background:'none',border:'none',cursor:'pointer',fontSize:16,color:'#94a3b8'}}>›</button>
+      </div>
+    </div>
+    
+    {/* Leyenda */}
+    <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap'}}>
+      {[['#dbeafe','Horario'],['#f3e8ff','Permiso'],['#fee2e2','Urgente'],['#dcfce7','Anuncio'],['#fef3c7','Recordatorio']].map(([c,l])=>(
+        <div key={l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:'#475569'}}>
+          <div style={{width:10,height:10,borderRadius:2,background:c as string}}/>
+          {l}
         </div>
+      ))}
+    </div>
+    
+    {/* Días semana */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
+      {['L','M','M','J','V','S','D'].map((d,i)=>(
+        <div key={i} style={{textAlign:'center',fontSize:10,fontWeight:600,color:'#94a3b8',padding:'4px 0'}}>{d}</div>
+      ))}
+    </div>
+    
+    {/* Días */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
+      {Array.from({length:(primerDia===0?6:primerDia-1)}).map((_,i)=><div key={`e${i}`}/>)}
+      {Array.from({length:diasEnMes}).map((_,i)=>{
+        const dia=i+1
+        const avisosD=avisosDelDia(dia)
+        const esHoy=new Date().getDate()===dia&&new Date().getMonth()===mesVer&&new Date().getFullYear()===anioVer
+        
+        return (
+          <div key={dia} title={avisosD.map(a=>`${a.titulo} (${a.tipo})`).join('\n')}
+            style={{textAlign:'center',padding:'4px 2px',borderRadius:6,fontSize:11,fontWeight:esHoy?700:500,
+              background:esHoy?'#002F6C':'white',
+              color:esHoy?'white':'#374151',
+              cursor:'pointer',minHeight:32,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+              border:esHoy?'2px solid #002F6C':'1px solid #e2e8f0',
+              position:'relative',overflow:'hidden'}}>
+            <span style={{zIndex:1}}>{dia}</span>
+            
+            {/* Indicadores de eventos */}
+            {avisosD.length > 0 && (
+              <div style={{display:'flex',gap:1,marginTop:2,flexWrap:'wrap',justifyContent:'center',zIndex:1}}>
+                {avisosD.slice(0,3).map((a,idx)=>(
+                  <div key={idx} style={{
+                    width:4,height:4,borderRadius:'50%',
+                    background:TIPO_CFG[a.tipo]?.bg??'#f3e8ff',
+                    border:`1px solid ${TIPO_CFG[a.tipo]?.txt??'#7c3aed'}`
+                  }}/>
+                ))}
+                {avisosD.length > 3 && (
+                  <span style={{fontSize:7,color:'#64748b'}}>+{avisosD.length-3}</span>
+                )}
+              </div>
+            )}
+            
+            {/* Fondo degradado si hay eventos */}
+            {avisosD.length > 0 && !esHoy && (
+              <div style={{position:'absolute',bottom:0,left:0,right:0,height:3,
+                background:`linear-gradient(90deg, ${avisosD.map(a=>TIPO_CFG[a.tipo]?.bg??'#f3e8ff').join(', ')})`
+              }}/>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  </div>
+</div>
       </div>
 
       {modal&&(

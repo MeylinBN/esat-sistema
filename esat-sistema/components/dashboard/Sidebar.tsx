@@ -2,6 +2,7 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 
 const NAV_PRINCIPAL = [
   {href:'/dashboard',            icon:'📊', label:'Dashboard'},
@@ -37,6 +38,23 @@ function NavLink({href,icon,label}:{href:string,icon:string,label:string}){
 export default function Sidebar(){
   const router=useRouter()
   const supabase=createClient()
+  const [usuario, setUsuario] = useState<any>(null)
+  
+  useEffect(() => {
+    async function cargarUsuario() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const {  userData } = await supabase
+          .from('personas')
+          .select('nombre, rol')
+          .eq('auth_id', user.id)
+          .single()
+        setUsuario(userData)
+      }
+    }
+    cargarUsuario()
+  }, [supabase])
+  
   async function logout(){await supabase.auth.signOut();router.push('/auth/login')}
 
   return (
@@ -51,6 +69,25 @@ export default function Sidebar(){
           </div>
         </div>
       </div>
+      
+      {/* Usuario Logueado */}
+      {usuario && (
+        <div style={{padding:'14px 18px',background:'rgba(255,255,255,.05)',borderBottom:'1px solid rgba(255,255,255,.1)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <div style={{width:32,height:32,borderRadius:'50%',background:'linear-gradient(135deg, #10b981, #059669)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:'white',boxShadow:'0 2px 8px rgba(16, 185, 129, .3)'}}>
+              {usuario.nombre?.charAt(0).toUpperCase()}
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:600,color:'#fff',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                {usuario.nombre}
+              </div>
+              <div style={{fontSize:9,color:'rgba(255,255,255,.5)',textTransform:'capitalize'}}>
+                {usuario.rol?.replace('_', ' ')}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <nav style={{padding:'12px 10px',flex:1,overflowY:'auto'}}>
         <div style={{fontSize:9,fontWeight:700,color:'rgba(255,255,255,.35)',letterSpacing:'.12em',textTransform:'uppercase',padding:'4px 12px 8px'}}>PRINCIPAL</div>

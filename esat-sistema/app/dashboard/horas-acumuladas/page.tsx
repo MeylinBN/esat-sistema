@@ -14,9 +14,13 @@ export default function HorasAcumuladasPage() {
   const [personaSel, setPersonaSel] = useState<string>('')
   const [mesSel, setMesSel] = useState(format(new Date(), 'yyyy-MM'))
 
-  useEffect(() => {
-    load()
-  }, [])
+ useEffect(() => {
+  supabase.from('personas')
+    .select('id,nombre,color,rol,grupo,subrol')
+    .eq('activo', true)  // ← AGREGA ESTO
+    .order('nombre')
+    .then(({ data }) => setPersonas(data ?? []))
+}, [])
 
   async function load() {
     const [p, a, h] = await Promise.all([
