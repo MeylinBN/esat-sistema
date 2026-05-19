@@ -117,8 +117,6 @@ export default function ExportarPage() {
           else todasAsistencias = [...todasAsistencias, ...(data ?? [])]
         }
 
-        console.log('✅ Total asistencias:', todasAsistencias.length)
-        
         const porPersona: Record<string, any[]> = {}
         todasAsistencias.forEach(a => {
           if (!porPersona[a.persona_id]) porPersona[a.persona_id] = []
@@ -260,147 +258,147 @@ export default function ExportarPage() {
         const wb = utils.book_new()
         utils.book_append_sheet(wb, ws, 'Reporte')
         writeFile(wb, `ESAT_${tipo}_${meses.length===1?meses[0]:'multiple'}.xlsx`)
-
-
-
-      }else if (fmt === 'pdf') {
-  const { default: jsPDF } = await import('jspdf')
-  const { default: autoTable } = await import('jspdf-autotable')
-  
-  const doc = new jsPDF({ 
-    orientation: 'landscape',
-    unit: 'mm',
-    format: 'a4'
-  })
-  
-  const mesesTexto = meses.length === 1 ? meses[0] : `${meses.length} meses`
-  
-  // Título principal
-  doc.setFontSize(16)
-  doc.setTextColor(0, 47, 108)
-  doc.setFont('helvetica', 'bold')
-  doc.text(`REPORTE DE ${tipo.toUpperCase()}`, 14, 18)
-  
-  // Subtítulo
-  doc.setFontSize(9)
-  doc.setTextColor(100, 116, 139)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`${mesesTexto} | Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 24)
-  
-  let currentY = 32
-  
-  // Agrupar datos por persona para el PDF
-  const datosPorPersona: Array<{nombre: string, dni: string, rol: string, turno: string, asistencias: any[]}> = []
-  const porPersona: Record<string, any[]> = {}
-  
-  dataPreview.rows.forEach(row => {
-    if (row[0]?.includes('📋')) {
-      const partes = row[0].split('DNI:')
-      const nombre = partes[0].replace('📋 ', '').trim()
-      const dniRol = row[2]?.split(' · ') || []
-      const dni = row[1]?.replace('DNI: ', '').trim() || ''
-      const rol = dniRol[0] || ''
-      const turno = dniRol[1] || ''
-      
-      datosPorPersona.push({
-        nombre,
-        dni,
-        rol,
-        turno,
-        asistencias: []
-      })
-    } else if (row[0] && !row[0].includes('═══') && !row[0].includes('───') && !row[0].includes('📊') && row[0].match(/^\d{4}-\d{2}-\d{2}$/)) {
-      if (datosPorPersona.length > 0) {
-        datosPorPersona[datosPorPersona.length - 1].asistencias.push(row)
+      } else if (fmt === 'pdf') {
+        const { default: jsPDF } = await import('jspdf')
+        const { default: autoTable } = await import('jspdf-autotable')
+        
+        const doc = new jsPDF({ 
+          orientation: 'landscape',
+          unit: 'mm',
+          format: 'a4'
+        })
+        
+        const mesesTexto = meses.length === 1 ? meses[0] : `${meses.length} meses`
+        
+        // Título principal
+        doc.setFontSize(16)
+        doc.setTextColor(0, 47, 108)
+        doc.setFont('helvetica', 'bold')
+        doc.text(`REPORTE DE ${tipo.toUpperCase()}`, 14, 18)
+        
+        // Subtítulo
+        doc.setFontSize(9)
+        doc.setTextColor(100, 116, 139)
+        doc.setFont('helvetica', 'normal')
+        doc.text(`${mesesTexto} | Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 24)
+        
+        let currentY = 32
+        
+        // Procesar filas para PDF (Agrupar por persona)
+        // Filtramos las filas que tienen datos de asistencia (fechas) y las de encabezado
+        const datosPorPersona: Array<{nombre: string, dni: string, rol: string, turno: string, asistencias: any[]}> = []
+        let currentPersona: any = null
+        
+        dataPreview.rows.forEach(row => {
+          // Detectar encabezado de persona (ej: 📋 Meylin...)
+          if (row[0]?.includes('📋')) {
+            const nombre = row[0].replace('📋 ', '').trim()
+            const dni = row[1]?.replace('DNI: ', '').trim() || ''
+            const rolTurno = row[2]?.split(' · ') || []
+            const rol = rolTurno[0] || ''
+            const turno = rolTurno[1] || ''
+            
+            currentPersona = { nombre, dni, rol, turno, asistencias: [] }
+            datosPorPersona.push(currentPersona)
+          }
+          // Detectar fila de datos (fecha válida al inicio)
+          else if (row[0]?.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            if (currentPersona) {
+              currentPersona.asistencias.push(row)
+            }
+          }
+        })
+        
+        // Generar PDF por persona
+        datosPorPersona.forEach((persona, index) => {
+          // Línea superior azul (estilo ═══)
+          doc.setDrawColor(0, 47, 108)
+          doc.setLineWidth(0.8)
+          doc.line(14, currentY, 283, currentY)
+          currentY += 8
+          
+          // Nombre y datos (FUERA de la tabla)
+          doc.setFontSize(12)
+          doc.setTextColor(0, 47, 108)
+          doc.setFont('helvetica', 'bold')
+          doc.text(`${persona.nombre}`, 14, currentY)
+          
+          doc.setFont('helvetica', 'normal')
+          doc.setTextColor(51, 65, 85)
+          doc.text(`DNI: ${persona.dni}`, 100, currentY)
+          
+          doc.setTextColor(0, 47, 108)
+          doc.text(`${persona.rol}${persona.turno ? ` · ${persona.turno}` : ''}`, 150, currentY)
+          currentY += 8
+          
+          // Línea inferior gris (estilo ───)
+          doc.setDrawColor(203, 213, 225)
+          doc.setLineWidth(0.3)
+          doc.line(14, currentY, 283, currentY)
+          currentY += 10 // Espacio antes de la tabla
+          
+          // Tabla de asistencias
+          // Limpiar los datos para la tabla (quitar emojis y líneas separadoras)
+          const bodyData = persona.asistencias.map(row => [
+            row[0], 
+            row[1] || '—', 
+            row[2] || '—', 
+            row[3] || '—',
+            row[4] || '—'
+          ])
+          
+          autoTable(doc, {
+            head: [dataPreview.headers],
+            body: bodyData,
+            startY: currentY,
+            styles: {
+              fontSize: 8,
+              cellPadding: 2,
+              font: 'helvetica',
+              textColor: 15,
+              overflow: 'linebreak'
+            },
+            headStyles: {
+              fillColor: [0, 47, 108],
+              textColor: 255,
+              fontStyle: 'bold',
+              fontSize: 9
+            },
+            alternateRowStyles: {
+              fillColor: [248, 250, 252]
+            },
+            margin: { left: 14, right: 14 }
+          })
+          
+          currentY = (doc as any).lastAutoTable.finalY + 8
+          
+          // Total de la persona (Sin emojis)
+          const totalRow = dataPreview.rows.find(r => r[0]?.includes('📊 Total') && r[0]?.toLowerCase().includes(persona.nombre.split(' ')[0].toLowerCase()))
+          if (totalRow && totalRow[4]) {
+            doc.setFontSize(9)
+            doc.setFont('helvetica', 'bold')
+            doc.setTextColor(21, 128, 61)
+            
+            // Fondo verde para el total
+            doc.setFillColor(220, 252, 231)
+            doc.rect(14, currentY - 4, 60, 6, 'F')
+            
+            // Texto del total
+            doc.text(`Total ${persona.nombre.split(' ')[0]}`, 16, currentY)
+            doc.text(`${totalRow[4]}`, 200, currentY)
+            currentY += 14
+          }
+          
+          // Salto de página si hay más personas
+          if (index < datosPorPersona.length - 1 && currentY > 180) {
+            doc.addPage()
+            currentY = 20
+          }
+        })
+        
+        const nombreArchivo = `ESAT_${tipo}_${meses.length===1?meses[0]:'multiple'}.pdf`
+        doc.save(nombreArchivo)
       }
-    }
-  })
-  
-  // Generar PDF por persona
-  datosPorPersona.forEach((persona, index) => {
-    // Línea superior
-    doc.setDrawColor(0, 47, 108)
-    doc.setLineWidth(0.5)
-    doc.line(14, currentY, 283, currentY)
-    currentY += 8
-    
-    // Nombre y datos (FUERA de la tabla)
-    doc.setFontSize(11)
-    doc.setTextColor(0, 47, 108)
-    doc.setFont('helvetica', 'bold')
-    doc.text(`📋 ${persona.nombre}`, 14, currentY)
-    
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(51, 65, 85)
-    doc.text(`DNI: ${persona.dni}`, 100, currentY)
-    
-    doc.setTextColor(0, 47, 108)
-    doc.text(`${persona.rol}${persona.turno ? ` · ${persona.turno}` : ''}`, 150, currentY)
-    currentY += 8
-    
-    // Línea inferior
-    doc.setDrawColor(203, 213, 225)
-    doc.setLineWidth(0.3)
-    doc.line(14, currentY, 283, currentY)
-    currentY += 8
-    
-    // Tabla de asistencias
-    const bodyData = persona.asistencias.map(row => [
-      row[0], // Fecha
-      row[1] || '—', // Entrada
-      row[2] || '—', // Salida
-      row[3] || '—', // Estado
-      row[4] || '—'  // Horas Trabajadas
-    ])
-    
-    autoTable(doc, {
-      head: [dataPreview.headers],
-      body: bodyData,
-      startY: currentY,
-      styles: {
-        fontSize: 8,
-        cellPadding: 2,
-        font: 'helvetica',
-        textColor: 15,
-        overflow: 'linebreak'
-      },
-      headStyles: {
-        fillColor: [0, 47, 108],
-        textColor: 255,
-        fontStyle: 'bold',
-        fontSize: 9
-      },
-      alternateRowStyles: {
-        fillColor: [248, 250, 252]
-      },
-      margin: { left: 14, right: 14 }
-    })
-    
-    currentY = (doc as any).lastAutoTable.finalY + 8
-    
-    // Total de la persona
-    const totalRow = dataPreview.rows.find(r => r[0]?.includes('📊 Total') && r[0]?.toLowerCase().includes(persona.nombre.split(' ')[0].toLowerCase()))
-    if (totalRow && totalRow[4]) {
-      doc.setFontSize(9)
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(21, 128, 61)
-      doc.setFillColor(220, 252, 231)
-      doc.rect(14, currentY - 2, 60, 6, 'F')
-      doc.text(`📊 Total ${persona.nombre.split(' ')[0]}`, 16, currentY + 3)
-      doc.text(`${totalRow[4]}`, 200, currentY + 3)
-      currentY += 12
-    }
-    
-    // Salto de página si hay más personas
-    if (index < datosPorPersona.length - 1) {
-      doc.addPage()
-      currentY = 20
-    }
-  })
-  
-  const nombreArchivo = `ESAT_${tipo}_${meses.length===1?meses[0]:'multiple'}.pdf`
-  doc.save(nombreArchivo)
-}
     } catch(err) {
       console.error('Error exportando:', err)
       alert('Error al generar el archivo.')
