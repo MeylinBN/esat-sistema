@@ -18,15 +18,10 @@ export default function LoginPage() {
 
     const email = `${dni.trim()}@sistema.esat`
     
-    console.log('🔐 Intentando login:', email)
-    
     const { data, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password
     })
-
-    console.log('📊 Response:', data)
-    console.log('❌ Error:', authError)
 
     if (authError) {
       setError('DNI o contraseña incorrectos')
@@ -34,9 +29,7 @@ export default function LoginPage() {
       return
     }
 
-    console.log('✅ Login exitoso, redirigiendo...')
-    
-    // Forzar recarga completa para asegurar cookies
+    // Redirección exitosa
     window.location.href = '/dashboard'
   }
 
@@ -47,15 +40,51 @@ export default function LoginPage() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '24px'
+      padding: '24px',
+      position: 'relative'
     }}>
+      {/* Botón Atrás */}
+      <button
+        onClick={() => router.push('/')}
+        style={{
+          position: 'absolute',
+          top: 24,
+          left: 24,
+          background: 'rgba(255,255,255,.15)',
+          border: '1px solid rgba(255,255,255,.25)',
+          borderRadius: 10,
+          padding: '10px 16px',
+          color: 'white',
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          backdropFilter: 'blur(10px)',
+          transition: 'all .2s',
+          zIndex: 10
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(255,255,255,.25)'
+          e.currentTarget.style.transform = 'translateX(-3px)'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'rgba(255,255,255,.15)'
+          e.currentTarget.style.transform = 'translateX(0)'
+        }}
+      >
+        ← Volver
+      </button>
+
       <div style={{
         background: 'rgba(255,255,255,.97)',
         borderRadius: 20,
         padding: '32px 28px',
         width: '100%',
         maxWidth: 380,
-        boxShadow: '0 32px 80px rgba(0,0,0,.35)'
+        boxShadow: '0 32px 80px rgba(0,0,0,.35)',
+        marginTop: 40
       }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>🔐</div>
@@ -91,7 +120,8 @@ export default function LoginPage() {
                 border: '1.5px solid #CBD5E1',
                 borderRadius: 10,
                 fontSize: 14,
-                outline: 'none'
+                outline: 'none',
+                boxSizing: 'border-box'
               }}
             />
           </div>
@@ -119,7 +149,8 @@ export default function LoginPage() {
                 border: '1.5px solid #CBD5E1',
                 borderRadius: 10,
                 fontSize: 14,
-                outline: 'none'
+                outline: 'none',
+                boxSizing: 'border-box'
               }}
             />
           </div>
@@ -150,7 +181,8 @@ export default function LoginPage() {
               borderRadius: 10,
               fontSize: 14,
               fontWeight: 600,
-              cursor: loading ? 'not-allowed' : 'pointer'
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'background .2s'
             }}
           >
             {loading ? 'Ingresando...' : 'Ingresar →'}
