@@ -44,7 +44,7 @@ export default function Sidebar(){
     async function cargarUsuario() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        const {  userData } = await supabase
+        const {  data:userData } = await supabase
           .from('personas')
           .select('nombre, rol')
           .eq('auth_id', user.id)
