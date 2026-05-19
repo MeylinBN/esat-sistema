@@ -50,11 +50,11 @@ export default function Sidebar(){
           return
         }
         
-        const {  userData, error: dataError } = await supabase
-          .from('personas')
-          .select('nombre, rol')
-          .eq('auth_id', user.id)
-          .single()
+       const { data: userData, error: dataError } = await supabase
+  .from('personas')
+  .select('nombre, rol')
+  .eq('auth_id', user.id)
+  .single()
           
         if (dataError) {
           console.error('Error obteniendo datos:', dataError)
