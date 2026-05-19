@@ -1,4 +1,3 @@
-
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -12,7 +11,6 @@ export default function MiPanelPage() {
   const hoy = format(new Date(),'yyyy-MM-dd')
   const diaKey = DIAS[new Date().getDay()]
   const [tiempo, setTiempo] = useState(format(new Date(),'HH:mm'))
-  const [horaManual, setHoraManual] = useState(format(new Date(),'HH:mm'))
 
   const [persona,    setPersona]    = useState<any>(null)
   const [horarios,   setHorarios]   = useState<any[]>([])
@@ -72,10 +70,14 @@ export default function MiPanelPage() {
   async function marcarEntrada(){
     if(!persona||registrando) return
     setRegistrando(true)
-    const hora = horaManual+':00'
+    
+    // ✅ HORA AUTOMÁTICA DEL SISTEMA
+    const hora = format(new Date(),'HH:mm:ss')
+    
     const [he,me]=(persona.hora_ingreso?.slice(0,5)??'08:30').split(':').map(Number)
-    const [hr,mr]=horaManual.split(':').map(Number)
+    const [hr,mr]=tiempo.split(':').map(Number)
     const tard=Math.max(0,(hr*60+mr)-(he*60+me)-(persona.tolerancia??10))
+    
     await supabase.from('asistencias').upsert(
       {persona_id:persona.id,fecha:hoy,hora_entrada:hora,estado:tard>0?'tarde':'presente',tardanza_min:tard},
       {onConflict:'persona_id,fecha'}
@@ -86,7 +88,11 @@ export default function MiPanelPage() {
   async function marcarSalida(){
     if(!persona||!asistHoy||registrando) return
     setRegistrando(true)
-    await supabase.from('asistencias').update({hora_salida:horaManual+':00'}).eq('id',asistHoy.id)
+    
+    // ✅ HORA AUTOMÁTICA DEL SISTEMA
+    const hora = format(new Date(),'HH:mm:ss')
+    
+    await supabase.from('asistencias').update({hora_salida:hora}).eq('id',asistHoy.id)
     setRegistrando(false);load()
   }
 
@@ -202,13 +208,7 @@ export default function MiPanelPage() {
         <div style={{fontSize:52,fontWeight:700,color:'#002F6C',letterSpacing:'-1px',marginBottom:4,fontVariantNumeric:'tabular-nums'}}>{tiempo}</div>
         <div style={{fontSize:13,color:'#94a3b8',marginBottom:18}}>Marca tu asistencia del día de hoy</div>
 
-        {/* Input de hora */}
-        <div style={{display:'flex',justifyContent:'center',marginBottom:18}}>
-          <input type="time" value={horaManual} onChange={e=>setHoraManual(e.target.value)}
-            style={{padding:'8px 16px',border:'1.5px solid #e2e8f0',borderRadius:10,fontSize:18,fontWeight:600,color:'#002F6C',textAlign:'center',outline:'none',fontFamily:'inherit',width:140}}/>
-        </div>
-
-        {/* Botones */}
+        {/* Botones - SIN INPUT DE HORA */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
           <button onClick={marcarEntrada} disabled={registrando||!!asistHoy?.hora_entrada}
             style={{padding:'16px',borderRadius:12,border:'none',cursor:asistHoy?.hora_entrada?'not-allowed':'pointer',
