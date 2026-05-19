@@ -9,7 +9,6 @@ const NAV_PRINCIPAL = [
   {href:'/dashboard/avisos',     icon:'🔔', label:'Avisos'},
 ]
 const NAV_GESTION = [
-  {href:'/dashboard/carga-laboral',   icon:'⚖️',  label:'Carga laboral'},
   {href:'/dashboard/avance-semanal',  icon:'📈', label:'Avance semanal'},
   {href:'/dashboard/horas-acumuladas',icon:'⏱',  label:'Horas acumuladas'},
   {href:'/dashboard/horarios',        icon:'🕐', label:'Horarios'},
