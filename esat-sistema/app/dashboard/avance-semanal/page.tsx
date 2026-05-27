@@ -1,8 +1,16 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks } from 'date-fns'
+import { format, startOfWeek, addWeeks, subWeeks } from 'date-fns'
 import { es } from 'date-fns/locale'
+
+// Función para calcular el número de semana del año (1-53)
+// La Semana 1 comienza el 1 de Enero
+function getNumeroSemana(fecha: Date): number {
+  const inicio = new Date(fecha.getFullYear(), 0, 1)
+  const dias = Math.floor((fecha.getTime() - inicio.getTime()) / (24 * 60 * 60 * 1000))
+  return Math.ceil((dias + inicio.getDay() + 1) / 7)
+}
 
 export default function AvanceSemanalPage() {
   const supabase = createClient()
@@ -11,6 +19,8 @@ export default function AvanceSemanalPage() {
   const [avances, setAvances] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selPer, setSelPer] = useState('')
+  
+  // Estados del Modal
   const [modalAv, setModalAv] = useState(false)
   const [mTarea, setMTarea] = useState<any>(null)
   const [mPct, setMPct] = useState(0)
@@ -40,14 +50,14 @@ export default function AvanceSemanalPage() {
     setModalAv(false);setSaving(false);load()
   }
 
-  // Generar clave de semana: "2026-26"
+  // Generar clave de semana única para BD: "2026-20"
   function getSemanaKey(fecha: Date) {
     const year = fecha.getFullYear()
-    const week = format(fecha, 'w')
+    const week = getNumeroSemana(fecha)
     return `${year}-${week}`
   }
 
-  // Formatear semana: "Semana XX (DD/MM - DD/MM)"
+  // Formatear etiqueta visual: "Semana 20 (25/05 - 29/05)"
   function formatSemanaLabel(semanaKey: string) {
     try {
       if (!semanaKey) return 'Semana no especificada'
@@ -61,42 +71,39 @@ export default function AvanceSemanalPage() {
         week = parseInt(parts[1]) || 1
       }
       
-      // Calcular lunes de esa semana
-      const jan1 = new Date(year, 0, 1)
-      const startDate = new Date(jan1)
-      startDate.setDate(jan1.getDate() + (week - 1) * 7 - jan1.getDay() + 1)
+      // Calculamos una fecha aproximada dentro de esa semana para obtener el Lunes correcto
+      // Usamos startOfWeek con locale ES (Lunes)
+      const fechaReferencia = new Date(year, 0, 1 + (week * 7))
+      const lunesInicio = startOfWeek(fechaReferencia, { locale: es, weekStartsOn: 1 })
+      const viernesFin = new Date(lunesInicio)
+      viernesFin.setDate(lunesInicio.getDate() + 4)
       
-      const endDate = new Date(startDate)
-      endDate.setDate(startDate.getDate() + 4) // Viernes
-      
-      const startStr = format(startDate, 'dd/MM')
-      const endStr = format(endDate, 'dd/MM')
-      
-      return `Semana ${week} (${startStr} - ${endStr})`
+      return `Semana ${week} (${format(lunesInicio, 'dd/MM')} - ${format(viernesFin, 'dd/MM')})`
     } catch (error) {
       console.error('Error formateando semana:', semanaKey, error)
       return semanaKey || 'Semana desconocida'
     }
   }
 
-  // Generar semanas disponibles (anterior + actual + 4 próximas)
+  // Generar lista de semanas para el Dropdown (Anterior + Actual + 4 Próximas)
   function generarSemanasDisponibles() {
     const hoy = new Date()
-    const semanaActual = startOfWeek(hoy, { locale: es })
+    // Aseguramos que la semana comience en Lunes
+    const semanaActualInicio = startOfWeek(hoy, { locale: es, weekStartsOn: 1 })
     
     const semanas = []
     
-    // Semana anterior
-    const semanaAnt = subWeeks(semanaActual, 1)
+    // 1. Semana Anterior
+    const semanaAnt = subWeeks(semanaActualInicio, 1)
     semanas.push({
       key: getSemanaKey(semanaAnt),
       label: formatSemanaLabel(getSemanaKey(semanaAnt)),
       esAnterior: true
     })
     
-    // Semana actual + 4 próximas
+    // 2. Semana Actual + 4 Próximas
     for (let i = 0; i <= 4; i++) {
-      const sem = addWeeks(semanaActual, i)
+      const sem = addWeeks(semanaActualInicio, i)
       semanas.push({
         key: getSemanaKey(sem),
         label: formatSemanaLabel(getSemanaKey(sem)),
@@ -111,17 +118,19 @@ export default function AvanceSemanalPage() {
     return avances.filter(a=>a.tarea_id===tid).sort((a,b)=>b.semana.localeCompare(a.semana))[0] 
   }
 
-  // Obtener avances únicos por semana
+  // Obtener avances agrupados por semana (eliminando duplicados antiguos)
   function avancesPorSemana(tid:string) {
     const avancesTarea = avances.filter(a => a.tarea_id === tid)
     const porSemana: Record<string, any> = {}
     
     avancesTarea.forEach(av => {
+      // Guardamos solo el registro más reciente por semana
       if (!porSemana[av.semana] || av.created_at > porSemana[av.semana].created_at) {
         porSemana[av.semana] = av
       }
     })
     
+    // Ordenar de más reciente a más antiguo
     return Object.values(porSemana).sort((a, b) => b.semana.localeCompare(a.semana))
   }
 
@@ -139,7 +148,7 @@ export default function AvanceSemanalPage() {
           <p style={{fontSize:12,color:'#94a3b8',marginTop:2}}>Registro de progreso por semana</p>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
-          {/* Selector persona */}
+          {/* Filtro por Persona */}
           <select value={selPer} onChange={e=>setSelPer(e.target.value)} style={{padding:'8px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontSize:13,fontFamily:'inherit',maxWidth:200}}>
             <option value="">Todas las personas</option>
             {personas.map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}
@@ -147,7 +156,6 @@ export default function AvanceSemanalPage() {
         </div>
       </div>
 
-      {/* Lista de personas con tareas */}
       <div style={{display:'flex',flexDirection:'column',gap:16}}>
         {personasFiltro.filter(p=>tareasVistaPer.some(t=>t.persona_id===p.id)).map(p=>{
           const tpers=tareasVistaPer.filter(t=>t.persona_id===p.id)
@@ -156,6 +164,7 @@ export default function AvanceSemanalPage() {
           
           return (
             <div key={p.id} style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+              {/* Header Persona */}
               <div style={{padding:'14px 20px',borderBottom:'1px solid #e2e8f0',background:'#f8fafc',display:'flex',alignItems:'center',gap:12}}>
                 <div style={{width:38,height:38,borderRadius:'50%',background:p.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:'white'}}>{p.nombre.charAt(0)}</div>
                 <div style={{flex:1}}>
@@ -187,7 +196,7 @@ export default function AvanceSemanalPage() {
                             </button>
                           </div>
                           
-                          {/* Historial de avances */}
+                          {/* Historial de Avances (Solo semanas con datos) */}
                           {avancesSemana.length > 0 ? (
                             <div>
                               <div style={{fontSize:10,fontWeight:600,color:'#64748b',marginBottom:8,textTransform:'uppercase'}}>📊 Historial de Avances</div>
@@ -251,7 +260,7 @@ export default function AvanceSemanalPage() {
         )}
       </div>
 
-      {/* Modal avance - CON DROPDOWN */}
+      {/* Modal de Registro con Dropdown Automático */}
       {modalAv&&mTarea&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>{if(e.target===e.currentTarget)setModalAv(false)}}>
           <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:450,boxShadow:'0 24px 80px rgba(0,0,0,.25)'}}>
@@ -261,7 +270,7 @@ export default function AvanceSemanalPage() {
             </div>
             <div style={{marginBottom:14,padding:'10px 14px',background:'#eff6ff',borderRadius:9,fontSize:13,fontWeight:600,color:'#002F6C'}}>{mTarea.titulo}</div>
             
-            {/* Dropdown de semanas */}
+            {/* Dropdown de Semanas */}
             <div style={{marginBottom:12}}>
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Semana</label>
               <select 
