@@ -42,9 +42,30 @@ export default function AvanceSemanalPage() {
   }
 
   // Formatear semana: "Semana XX (DD/MM - DD/MM)"
-  function formatSemanaLabel(semanaKey: string) {
-    // semanaKey viene como "2026-20" (año-semana)
-    const [year, week] = semanaKey.split('-').map(Number)
+ // Formatear semana: "Semana XX (DD/MM - DD/MM)"
+function formatSemanaLabel(semanaKey: string) {
+  try {
+    if (!semanaKey) return 'Semana no especificada'
+    
+    // semanaKey puede venir como "2026-20" o "Semana 20" u otro formato
+    let year = 2026
+    let week = 1
+    
+    if (semanaKey.includes('-')) {
+      // Formato: "2026-20"
+      const parts = semanaKey.split('-')
+      year = parseInt(parts[0]) || 2026
+      week = parseInt(parts[1]) || 1
+    } else if (semanaKey.includes('Semana')) {
+      // Formato: "Semana 20 (25/05 - 29/05)" - extraer número
+      const match = semanaKey.match(/Semana\s+(\d+)/)
+      if (match) {
+        week = parseInt(match[1]) || 1
+      }
+    } else {
+      // Solo número
+      week = parseInt(semanaKey) || 1
+    }
     
     // Calcular lunes de esa semana
     const jan1 = new Date(year, 0, 1)
@@ -58,7 +79,11 @@ export default function AvanceSemanalPage() {
     const endStr = format(endDate, 'dd/MM')
     
     return `Semana ${week} (${startStr} - ${endStr})`
+  } catch (error) {
+    console.error('Error formateando semana:', semanaKey, error)
+    return semanaKey || 'Semana desconocida'
   }
+}
 
   function ultimoAv(tid:string){ 
     return avances.filter(a=>a.tarea_id===tid).sort((a,b)=>b.semana.localeCompare(a.semana))[0] 
@@ -195,7 +220,11 @@ export default function AvanceSemanalPage() {
                         return (
                           <div key={t.id} style={{padding:'10px 12px',background:'#f0fdf4',borderRadius:9,border:'1px solid #86efac',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                             <span style={{fontSize:12,fontWeight:600,color:'#15803d'}}>{t.titulo}</span>
-                            <span style={{fontSize:11,color:'#15803d',fontWeight:700}}>100% · {ua?.semana ? formatSemanaLabel(ua.semana) : '—'}</span>
+                            
+<span style={{fontSize:11,color:'#15803d',fontWeight:700}}>
+  100% · {ua?.semana ? formatSemanaLabel(ua.semana) : '—'}
+</span>
+
                           </div>
                         )
                       })}
