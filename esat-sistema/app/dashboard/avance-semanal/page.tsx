@@ -1,38 +1,70 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { format, addDays, subDays } from 'date-fns'
+import { format, addDays, subDays, startOfWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 
-// Definimos el inicio del año operativo (Semana 1 empieza el 12 de Enero)
-const DIA_INICIO_SEMANA_1 = 12 
+// Inicio del año operativo: Semana 1 = 12 de Enero
+const DIA_INICIO_SEMANA_1 = 12
 
+// Calcular info de semana basado en fecha
 function getSemanaInfo(fecha: Date) {
-    const year = fecha.getFullYear()
-    // Creamos la fecha de inicio de Semana 1 para el año correspondiente
-    const inicioAnio = new Date(year, 0, DIA_INICIO_SEMANA_1)
-    
-    // Calculamos diferencia en días
-    const diffTime = fecha.getTime() - inicioAnio.getTime()
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-    
-    // Calculamos número de semana (1-based)
-    const numSemana = Math.floor(diffDays / 7) + 1
-    
-    // Calculamos las fechas exactas (Lunes a Viernes) basadas en ese número de semana
-    // Lunes = InicioAnio + (Semana-1)*7 días
-    const lunes = new Date(inicioAnio)
-    lunes.setDate(inicioAnio.getDate() + (numSemana - 1) * 7)
-    
-    const viernes = new Date(lunes)
-    viernes.setDate(lunes.getDate() + 4)
-    
-    return {
-        numSemana,
-        key: `${year}-${numSemana}`,
-        label: `Semana ${numSemana} (${format(lunes, 'dd/MM')} - ${format(viernes, 'dd/MM')})`,
-        inicio: lunes,
-        fin: viernes
+    try {
+        const year = fecha.getFullYear()
+        const inicioAnio = new Date(year, 0, DIA_INICIO_SEMANA_1)
+        
+        const diffTime = fecha.getTime() - inicioAnio.getTime()
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+        const numSemana = Math.max(1, Math.floor(diffDays / 7) + 1)
+        
+        const lunes = new Date(inicioAnio)
+        lunes.setDate(inicioAnio.getDate() + (numSemana - 1) * 7)
+        
+        const viernes = new Date(lunes)
+        viernes.setDate(lunes.getDate() + 4)
+        
+        return {
+            numSemana,
+            key: `${year}-${numSemana}`,
+            label: `Semana ${numSemana} (${format(lunes, 'dd/MM')} - ${format(viernes, 'dd/MM')})`,
+            inicio: lunes,
+            fin: viernes
+        }
+    } catch (error) {
+        console.error('Error calculando semana:', error)
+        // Valor por defecto seguro
+        return {
+            numSemana: 1,
+            key: `${new Date().getFullYear()}-1`,
+            label: 'Semana desconocida',
+            inicio: new Date(),
+            fin: new Date()
+        }
+    }
+}
+
+// Formatear etiqueta desde clave de BD (ej: "2026-20")
+function formatSemanaLabel(semanaKey: string) {
+    try {
+        if (!semanaKey || !semanaKey.includes('-')) return 'Semana no especificada'
+        
+        const [yearStr, weekStr] = semanaKey.split('-')
+        const year = parseInt(yearStr)
+        const week = parseInt(weekStr)
+        
+        if (isNaN(year) || isNaN(week)) return 'Semana inválida'
+        
+        const inicioAnio = new Date(year, 0, DIA_INICIO_SEMANA_1)
+        const lunes = new Date(inicioAnio)
+        lunes.setDate(inicioAnio.getDate() + (week - 1) * 7)
+        
+        const viernes = new Date(lunes)
+        viernes.setDate(lunes.getDate() + 4)
+        
+        return `Semana ${week} (${format(lunes, 'dd/MM')} - ${format(viernes, 'dd/MM')})`
+    } catch (error) {
+        console.error('Error formateando semana:', semanaKey, error)
+        return semanaKey || 'Semana desconocida'
     }
 }
 
@@ -53,24 +85,34 @@ export default function AvanceSemanalPage() {
   useEffect(()=>{load()},[])
 
   async function load(){
-    const [p,t,a]=await Promise.all([
-      supabase.from('personas').select('id,nombre,color,rol,subrol').eq('activo',true).order('nombre'),
-      supabase.from('tareas').select('*,personas(nombre,color)').neq('estado','cancelada').order('created_at',{ascending:false}),
-      supabase.from('avances_semanales').select('*').order('semana',{ascending:false}),
-    ])
-    setPersonas(p.data??[]);setTareas(t.data??[]);setAvances(a.data??[])
-    setLoading(false)
+    try {
+        const [p,t,a]=await Promise.all([
+        supabase.from('personas').select('id,nombre,color,rol,subrol').eq('activo',true).order('nombre'),
+        supabase.from('tareas').select('*,personas(nombre,color)').neq('estado','cancelada').order('created_at',{ascending:false}),
+        supabase.from('avances_semanales').select('*').order('semana',{ascending:false}),
+        ])
+        setPersonas(p.data??[]);setTareas(t.data??[]);setAvances(a.data??[])
+    } catch (error) {
+        console.error('Error cargando datos:', error)
+    } finally {
+        setLoading(false)
+    }
   }
 
   async function guardar(){
     if(!mTarea||!mSem) return
     setSaving(true)
-    await supabase.from('avances_semanales').upsert(
-      {tarea_id:mTarea.id,semana:mSem,porcentaje:mPct},
-      {onConflict:'tarea_id,semana'}
-    )
-    if(mPct>=100) await supabase.from('tareas').update({estado:'completada'}).eq('id',mTarea.id)
-    setModalAv(false);setSaving(false);load()
+    try {
+        await supabase.from('avances_semanales').upsert(
+        {tarea_id:mTarea.id,semana:mSem,porcentaje:mPct},
+        {onConflict:'tarea_id,semana'}
+        )
+        if(mPct>=100) await supabase.from('tareas').update({estado:'completada'}).eq('id',mTarea.id)
+    } catch (error) {
+        console.error('Error guardando:', error)
+    } finally {
+        setModalAv(false);setSaving(false);load()
+    }
   }
 
   function ultimoAv(tid:string){ 
@@ -90,33 +132,36 @@ export default function AvanceSemanalPage() {
     return Object.values(porSemana).sort((a, b) => b.semana.localeCompare(a.semana))
   }
 
-  // Generar Dropdown: Semana Anterior + Actual + 4 Próximas
-  // Generar Dropdown: Semana Anterior + Actual + 4 Próximas
   function generarSemanasDisponibles() {
-    const hoy = new Date()
-    const infoHoy = getSemanaInfo(hoy)
-    
-    const semanas = []
-    
-    // 1. Semana Anterior
-    const infoAnterior = getSemanaInfo(subDays(infoHoy.inicio, 7))
-    semanas.push({ 
-        ...infoAnterior, 
-        esAnterior: true, 
-        esActual: false  // 👈 Agregado para evitar error de tipo
-    })
-    
-    // 2. Actual + 4 Próximas
-    for (let i = 0; i <= 4; i++) {
-        const fechaIteracion = addDays(infoHoy.inicio, i * 7)
+    try {
+        const hoy = new Date()
+        const infoHoy = getSemanaInfo(hoy)
+        
+        const semanas: any[] = []
+        
+        // Semana Anterior
+        const infoAnterior = getSemanaInfo(subDays(infoHoy.inicio, 7))
         semanas.push({ 
-            ...getSemanaInfo(fechaIteracion), 
-            esAnterior: false, // 👈 Agregado para evitar error de tipo
-            esActual: i === 0 
+            ...infoAnterior, 
+            esAnterior: true,
+            esActual: false
         })
+        
+        // Actual + 4 Próximas
+        for (let i = 0; i <= 4; i++) {
+            const fechaIteracion = addDays(infoHoy.inicio, i * 7)
+            semanas.push({ 
+                ...getSemanaInfo(fechaIteracion), 
+                esAnterior: false,
+                esActual: i === 0 
+            })
+        }
+        
+        return semanas
+    } catch (error) {
+        console.error('Error generando semanas:', error)
+        return []
     }
-    
-    return semanas
   }
 
   const personasFiltro = selPer ? personas.filter(p=>p.id===selPer) : personas
@@ -186,8 +231,7 @@ export default function AvanceSemanalPage() {
                                   <div key={idx} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',background:'white',borderRadius:8,border:'1px solid #e2e8f0'}}>
                                     <div style={{flex:1}}>
                                       <div style={{fontSize:11,fontWeight:600,color:'#002F6C'}}>
-                                        {/* Aquí usamos la función de formateo para asegurar consistencia */}
-                                        {getSemanaInfo(new Date(av.semana.split('-')[0], 0, 12 + (parseInt(av.semana.split('-')[1])-1)*7)).label}
+                                        {formatSemanaLabel(av.semana)}
                                       </div>
                                     </div>
                                     <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -223,7 +267,7 @@ export default function AvanceSemanalPage() {
                           <div key={t.id} style={{padding:'10px 12px',background:'#f0fdf4',borderRadius:9,border:'1px solid #86efac',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                             <span style={{fontSize:12,fontWeight:600,color:'#15803d'}}>{t.titulo}</span>
                             <span style={{fontSize:11,color:'#15803d',fontWeight:700}}>
-                                100% · {ua?.semana ? getSemanaInfo(new Date(ua.semana.split('-')[0], 0, 12 + (parseInt(ua.semana.split('-')[1])-1)*7)).label : '—'}
+                                100% · {ua?.semana ? formatSemanaLabel(ua.semana) : '—'}
                             </span>
                           </div>
                         )
