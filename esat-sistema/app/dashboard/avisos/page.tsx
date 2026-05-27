@@ -59,7 +59,7 @@ export default function AvisosPage() {
     if (filtro === 'Recordatorios') return a.tipo === 'recordatorio'
     if (filtro === 'Urgentes') return a.urgente || a.tipo === 'urgente'
     return true
-  })SS
+  })
 
   // Calendario
   const diasEnMes = new Date(anioVer,mesVer+1,0).getDate()
