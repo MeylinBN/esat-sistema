@@ -77,52 +77,54 @@ export default function AsistenciaPage() {
   function tareasActivas(pid:string){return tareas.filter(t=>t.persona_id===pid&&t.estado==='en_progreso').length}
 
   async function guardar(){
-    if(!mPerId){return}
-    setSaving(true)
-    
-    const hora = hora+':00'
-    const asist = getA(mPerId)
-    const persona = personas.find(p=>p.id===mPerId)
-    
-    let tard=0
-    if(persona?.hora_ingreso&&mTipo==='entrada' && !esRecuperacion){
-      const [hE,mE]=persona.hora_ingreso.split(':').map(Number)
-      const [hR,mR]=mHora.split(':').map(Number)
-      tard=Math.max(0,(hR*60+mR)-(hE*60+mE)-(persona.tolerancia??10))
-    }
-    
-    if(!asist){
-      const estado = mEstado!=='presente' ? mEstado : (esRecuperacion ? 'presente' : tard>0?'tarde':'presente')
-      await supabase.from('asistencias').insert({
-        persona_id:mPerId,fecha:hoy,
-        hora_entrada:mTipo==='entrada'?hora:null,
-        hora_salida:mTipo==='salida'?hora:null,
-        hora_recuperacion: esRecuperacion ? hora : null,
-        recuperacion_motivo: esRecuperacion ? motivoRecuperacion : null,
-        recuperacion_aprobada: esRecuperacion ? false : null,
-        estado,tardanza_min:tard,observacion:mObs||null
-      })
-    } else {
-      const upd:any={observacion:mObs||asist.observacion}
-      if(mTipo==='entrada'){
-        upd.hora_entrada=hora
-        if(esRecuperacion){
-          upd.hora_recuperacion = hora
-          upd.recuperacion_motivo = motivoRecuperacion
-          upd.recuperacion_aprobada = false
-        }
-        if(tard>0)upd.estado='tarde'
-      } else {
-        upd.hora_salida=hora
-        if(esRecuperacion){
-          upd.hora_recuperacion = hora
-          upd.recuperacion_motivo = motivoRecuperacion
-        }
-      }
-      await supabase.from('asistencias').update(upd).eq('id',asist.id)
-    }
-    setModal(false);setMObs('');setEsRecuperacion(false);setMotivoRecuperacion('');setSaving(false);load()
+  if(!mPerId){return}
+  setSaving(true)
+  
+  // ✅ CORRECCIÓN: Usar mHora (el estado) para crear la hora completa
+  const horaCompleta = mHora+':00'
+  
+  const asist = getA(mPerId)
+  const persona = personas.find(p=>p.id===mPerId)
+  
+  let tard=0
+  if(persona?.hora_ingreso&&mTipo==='entrada' && !esRecuperacion){
+    const [hE,mE]=persona.hora_ingreso.split(':').map(Number)
+    const [hR,mR]=mHora.split(':').map(Number)  // ← mHora, no hora
+    tard=Math.max(0,(hR*60+mR)-(hE*60+mE)-(persona.tolerancia??10))
   }
+  
+  if(!asist){
+    const estado = mEstado!=='presente' ? mEstado : (esRecuperacion ? 'presente' : tard>0?'tarde':'presente')
+    await supabase.from('asistencias').insert({
+      persona_id:mPerId,fecha:hoy,
+      hora_entrada:mTipo==='entrada'?horaCompleta:null,  // ← horaCompleta
+      hora_salida:mTipo==='salida'?horaCompleta:null,    // ← horaCompleta
+      hora_recuperacion: esRecuperacion ? horaCompleta : null,  // ← horaCompleta
+      recuperacion_motivo: esRecuperacion ? motivoRecuperacion : null,
+      recuperacion_aprobada: esRecuperacion ? false : null,
+      estado,tardanza_min:tard,observacion:mObs||null
+    })
+  } else {
+    const upd:any={observacion:mObs||asist.observacion}
+    if(mTipo==='entrada'){
+      upd.hora_entrada=horaCompleta  // ← horaCompleta
+      if(esRecuperacion){
+        upd.hora_recuperacion = horaCompleta  // ← horaCompleta
+        upd.recuperacion_motivo = motivoRecuperacion
+        upd.recuperacion_aprobada = false
+      }
+      if(tard>0)upd.estado='tarde'
+    } else {
+      upd.hora_salida=horaCompleta  // ← horaCompleta
+      if(esRecuperacion){
+        upd.hora_recuperacion = horaCompleta  // ← horaCompleta
+        upd.recuperacion_motivo = motivoRecuperacion
+      }
+    }
+    await supabase.from('asistencias').update(upd).eq('id',asist.id)
+  }
+  setModal(false);setMObs('');setEsRecuperacion(false);setMotivoRecuperacion('');setSaving(false);load()
+}
 
   const esat  = personas.filter(p=>p.grupo==='ESAT')
   const eco   = personas.filter(p=>p.grupo==='EcoBIOTEM')
