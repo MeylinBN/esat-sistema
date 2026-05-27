@@ -91,6 +91,7 @@ export default function AvanceSemanalPage() {
   }
 
   // Generar Dropdown: Semana Anterior + Actual + 4 Próximas
+  // Generar Dropdown: Semana Anterior + Actual + 4 Próximas
   function generarSemanasDisponibles() {
     const hoy = new Date()
     const infoHoy = getSemanaInfo(hoy)
@@ -99,12 +100,20 @@ export default function AvanceSemanalPage() {
     
     // 1. Semana Anterior
     const infoAnterior = getSemanaInfo(subDays(infoHoy.inicio, 7))
-    semanas.push({ ...infoAnterior, esAnterior: true })
+    semanas.push({ 
+        ...infoAnterior, 
+        esAnterior: true, 
+        esActual: false  // 👈 Agregado para evitar error de tipo
+    })
     
     // 2. Actual + 4 Próximas
     for (let i = 0; i <= 4; i++) {
         const fechaIteracion = addDays(infoHoy.inicio, i * 7)
-        semanas.push({ ...getSemanaInfo(fechaIteracion), esActual: i === 0 })
+        semanas.push({ 
+            ...getSemanaInfo(fechaIteracion), 
+            esAnterior: false, // 👈 Agregado para evitar error de tipo
+            esActual: i === 0 
+        })
     }
     
     return semanas
