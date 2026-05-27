@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 export default function AvanceSemanalPage() {
@@ -11,7 +11,6 @@ export default function AvanceSemanalPage() {
   const [avances, setAvances] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selPer, setSelPer] = useState('')
-  const [selMes, setSelMes] = useState(format(new Date(), 'yyyy-MM'))
   const [modalAv, setModalAv] = useState(false)
   const [mTarea, setMTarea] = useState<any>(null)
   const [mPct, setMPct] = useState(0)
@@ -41,55 +40,78 @@ export default function AvanceSemanalPage() {
     setModalAv(false);setSaving(false);load()
   }
 
+  // Generar clave de semana: "2026-26"
+  function getSemanaKey(fecha: Date) {
+    const year = fecha.getFullYear()
+    const week = format(fecha, 'w')
+    return `${year}-${week}`
+  }
+
   // Formatear semana: "Semana XX (DD/MM - DD/MM)"
- // Formatear semana: "Semana XX (DD/MM - DD/MM)"
-function formatSemanaLabel(semanaKey: string) {
-  try {
-    if (!semanaKey) return 'Semana no especificada'
-    
-    // semanaKey puede venir como "2026-20" o "Semana 20" u otro formato
-    let year = 2026
-    let week = 1
-    
-    if (semanaKey.includes('-')) {
-      // Formato: "2026-20"
-      const parts = semanaKey.split('-')
-      year = parseInt(parts[0]) || 2026
-      week = parseInt(parts[1]) || 1
-    } else if (semanaKey.includes('Semana')) {
-      // Formato: "Semana 20 (25/05 - 29/05)" - extraer número
-      const match = semanaKey.match(/Semana\s+(\d+)/)
-      if (match) {
-        week = parseInt(match[1]) || 1
+  function formatSemanaLabel(semanaKey: string) {
+    try {
+      if (!semanaKey) return 'Semana no especificada'
+      
+      let year = 2026
+      let week = 1
+      
+      if (semanaKey.includes('-')) {
+        const parts = semanaKey.split('-')
+        year = parseInt(parts[0]) || 2026
+        week = parseInt(parts[1]) || 1
       }
-    } else {
-      // Solo número
-      week = parseInt(semanaKey) || 1
+      
+      // Calcular lunes de esa semana
+      const jan1 = new Date(year, 0, 1)
+      const startDate = new Date(jan1)
+      startDate.setDate(jan1.getDate() + (week - 1) * 7 - jan1.getDay() + 1)
+      
+      const endDate = new Date(startDate)
+      endDate.setDate(startDate.getDate() + 4) // Viernes
+      
+      const startStr = format(startDate, 'dd/MM')
+      const endStr = format(endDate, 'dd/MM')
+      
+      return `Semana ${week} (${startStr} - ${endStr})`
+    } catch (error) {
+      console.error('Error formateando semana:', semanaKey, error)
+      return semanaKey || 'Semana desconocida'
+    }
+  }
+
+  // Generar semanas disponibles (anterior + actual + 4 próximas)
+  function generarSemanasDisponibles() {
+    const hoy = new Date()
+    const semanaActual = startOfWeek(hoy, { locale: es })
+    
+    const semanas = []
+    
+    // Semana anterior
+    const semanaAnt = subWeeks(semanaActual, 1)
+    semanas.push({
+      key: getSemanaKey(semanaAnt),
+      label: formatSemanaLabel(getSemanaKey(semanaAnt)),
+      esAnterior: true
+    })
+    
+    // Semana actual + 4 próximas
+    for (let i = 0; i <= 4; i++) {
+      const sem = addWeeks(semanaActual, i)
+      semanas.push({
+        key: getSemanaKey(sem),
+        label: formatSemanaLabel(getSemanaKey(sem)),
+        esActual: i === 0
+      })
     }
     
-    // Calcular lunes de esa semana
-    const jan1 = new Date(year, 0, 1)
-    const startDate = new Date(jan1)
-    startDate.setDate(jan1.getDate() + (week - 1) * 7 - jan1.getDay() + 1)
-    
-    const endDate = new Date(startDate)
-    endDate.setDate(startDate.getDate() + 4) // Viernes
-    
-    const startStr = format(startDate, 'dd/MM')
-    const endStr = format(endDate, 'dd/MM')
-    
-    return `Semana ${week} (${startStr} - ${endStr})`
-  } catch (error) {
-    console.error('Error formateando semana:', semanaKey, error)
-    return semanaKey || 'Semana desconocida'
+    return semanas
   }
-}
 
   function ultimoAv(tid:string){ 
     return avances.filter(a=>a.tarea_id===tid).sort((a,b)=>b.semana.localeCompare(a.semana))[0] 
   }
 
-  // Obtener avances únicos por semana (agrupados)
+  // Obtener avances únicos por semana
   function avancesPorSemana(tid:string) {
     const avancesTarea = avances.filter(a => a.tarea_id === tid)
     const porSemana: Record<string, any> = {}
@@ -105,6 +127,7 @@ function formatSemanaLabel(semanaKey: string) {
 
   const personasFiltro = selPer ? personas.filter(p=>p.id===selPer) : personas
   const tareasVistaPer = selPer ? tareas.filter(t=>t.persona_id===selPer) : tareas
+  const semanasDisponibles = generarSemanasDisponibles()
 
   if(loading) return <div style={{padding:40,textAlign:'center',color:'#94a3b8'}}>Cargando avances...</div>
 
@@ -116,19 +139,6 @@ function formatSemanaLabel(semanaKey: string) {
           <p style={{fontSize:12,color:'#94a3b8',marginTop:2}}>Registro de progreso por semana</p>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
-          {/* Selector de mes */}
-          <select 
-            value={selMes} 
-            onChange={e=>setSelMes(e.target.value)} 
-            style={{padding:'8px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontSize:13,fontFamily:'inherit'}}
-          >
-            {Array.from({ length: 12 }, (_, i) => {
-              const val = format(new Date(2026, i, 1), 'yyyy-MM')
-              const label = format(new Date(2026, i, 1), 'MMMM yyyy', { locale: es })
-              return <option key={val} value={val}>{label}</option>
-            })}
-          </select>
-          
           {/* Selector persona */}
           <select value={selPer} onChange={e=>setSelPer(e.target.value)} style={{padding:'8px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontSize:13,fontFamily:'inherit',maxWidth:200}}>
             <option value="">Todas las personas</option>
@@ -177,7 +187,7 @@ function formatSemanaLabel(semanaKey: string) {
                             </button>
                           </div>
                           
-                          {/* Historial de avances - SOLO semanas con registro */}
+                          {/* Historial de avances */}
                           {avancesSemana.length > 0 ? (
                             <div>
                               <div style={{fontSize:10,fontWeight:600,color:'#64748b',marginBottom:8,textTransform:'uppercase'}}>📊 Historial de Avances</div>
@@ -220,11 +230,7 @@ function formatSemanaLabel(semanaKey: string) {
                         return (
                           <div key={t.id} style={{padding:'10px 12px',background:'#f0fdf4',borderRadius:9,border:'1px solid #86efac',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                             <span style={{fontSize:12,fontWeight:600,color:'#15803d'}}>{t.titulo}</span>
-                            
-<span style={{fontSize:11,color:'#15803d',fontWeight:700}}>
-  100% · {ua?.semana ? formatSemanaLabel(ua.semana) : '—'}
-</span>
-
+                            <span style={{fontSize:11,color:'#15803d',fontWeight:700}}>100% · {ua?.semana ? formatSemanaLabel(ua.semana) : '—'}</span>
                           </div>
                         )
                       })}
@@ -245,19 +251,33 @@ function formatSemanaLabel(semanaKey: string) {
         )}
       </div>
 
-      {/* Modal avance */}
+      {/* Modal avance - CON DROPDOWN */}
       {modalAv&&mTarea&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>{if(e.target===e.currentTarget)setModalAv(false)}}>
-          <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:420,boxShadow:'0 24px 80px rgba(0,0,0,.25)'}}>
+          <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:450,boxShadow:'0 24px 80px rgba(0,0,0,.25)'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
               <h3 style={{fontSize:16,fontWeight:700,margin:0}}>Registrar avance</h3>
               <button onClick={()=>setModalAv(false)} style={{width:28,height:28,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
             </div>
             <div style={{marginBottom:14,padding:'10px 14px',background:'#eff6ff',borderRadius:9,fontSize:13,fontWeight:600,color:'#002F6C'}}>{mTarea.titulo}</div>
+            
+            {/* Dropdown de semanas */}
             <div style={{marginBottom:12}}>
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Semana</label>
-              <input value={mSem} onChange={e=>setMSem(e.target.value)} placeholder="Ej: Semana 26 (25/05 - 29/05)" style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+              <select 
+                value={mSem} 
+                onChange={e=>setMSem(e.target.value)}
+                style={{width:'100%',padding:'10px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13,outline:'none'}}
+              >
+                <option value="">Seleccionar semana...</option>
+                {semanasDisponibles.map((sem,idx)=>(
+                  <option key={sem.key} value={sem.key}>
+                    {sem.esAnterior ? '⬅️ ' : sem.esActual ? '📍 ' : ''}{sem.label}
+                  </option>
+                ))}
+              </select>
             </div>
+            
             <div style={{marginBottom:8}}>
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Avance: {mPct}%</label>
               <input type="range" min={0} max={100} step={5} value={mPct} onChange={e=>setMPct(+e.target.value)} style={{width:'100%',accentColor:'#002F6C'}}/>
