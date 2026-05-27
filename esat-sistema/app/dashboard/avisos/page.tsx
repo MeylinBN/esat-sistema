@@ -45,12 +45,10 @@ export default function AvisosPage() {
   }
 
   async function eliminar(id:string){
-    if(!confirm('¿Eliminar este aviso?')) return
-    await supabase.from('avisos').delete().eq('id',idgit add .
-git commit -m "feat: avance semanal con calculo automatico y dropdown inteligente"
-git push origin main);load()S
-  }
-S
+  if(!confirm('¿Eliminar este aviso?')) return
+  await supabase.from('avisos').delete().eq('id',id)
+  load()
+}
     // Tabs y Filtros
   const TABS = ['Todos', 'Anuncios', 'Permisos', 'Horarios', 'Recordatorios', 'Urgentes']
   const filtrados = avisos.filter(a => {
