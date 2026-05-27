@@ -1,39 +1,40 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
-const DIAS: Record<number,string> = {1:'L',2:'M',3:'X',4:'J',5:'V',6:'S',0:'D'}
-
 export default function MiPanelPage() {
   const supabase = createClient()
   const hoy = format(new Date(),'yyyy-MM-dd')
-  const diaKey = DIAS[new Date().getDay()]
   const [tiempo, setTiempo] = useState(format(new Date(),'HH:mm'))
-  const [necesitaRecuperar, setNecesitaRecuperar] = useState(false)
-const [diaRecuperacion, setDiaRecuperacion] = useState('')
-const [horaRecuperacionInicio, setHoraRecuperacionInicio] = useState('')
-const [horaRecuperacionFin, setHoraRecuperacionFin] = useState('')
 
-  const [persona,    setPersona]    = useState<any>(null)
-  const [horarios,   setHorarios]   = useState<any[]>([])
-  const [asistHoy,   setAsistHoy]   = useState<any>(null)
-  const [tareas,     setTareas]     = useState<any[]>([])
-  const [avances,    setAvances]    = useState<any[]>([])
-  const [asistMes,   setAsistMes]   = useState<any[]>([])
-  const [loading,    setLoading]    = useState(true)
-  const [registrando,setRegistrando]= useState(false)
-  const [modalAv,    setModalAv]    = useState(false)
-  const [mTarea,     setMTarea]     = useState<any>(null)
-  const [mPct,       setMPct]       = useState(0)
-  const [mSem,       setMSem]       = useState('')
-  const [saving,     setSaving]     = useState(false)
+  const [persona, setPersona] = useState<any>(null)
+  const [horarios, setHorarios] = useState<any[]>([])
+  const [asistHoy, setAsistHoy] = useState<any>(null)
+  const [tareas, setTareas] = useState<any[]>([])
+  const [avances, setAvances] = useState<any[]>([])
+  const [asistMes, setAsistMes] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [registrando, setRegistrando] = useState(false)
+  const [modalAv, setModalAv] = useState(false)
+  const [mTarea, setMTarea] = useState<any>(null)
+  const [mPct, setMPct] = useState(0)
+  const [mSem, setMSem] = useState('')
+  const [saving, setSaving] = useState(false)
+  
+  // Estados para permisos
   const [motivoPermiso, setMotivoPermiso] = useState('')
-  const [tipoPermiso,   setTipoPermiso]   = useState('permiso_medico')
-  const [fechaPermiso,  setFechaPermiso]  = useState(hoy)
+  const [tipoPermiso, setTipoPermiso] = useState('permiso_personal')
+  const [fechaPermiso, setFechaPermiso] = useState(hoy)
   const [enviandoPermiso, setEnviandoPermiso] = useState(false)
-  const [permisoOk, setPermisoOk]   = useState(false)
+  const [permisoOk, setPermisoOk] = useState(false)
+  
+  // Estados para recuperación (NUEVOS)
+  const [necesitaRecuperar, setNecesitaRecuperar] = useState(false)
+  const [diaRecuperacion, setDiaRecuperacion] = useState('')
+  const [horaRecuperacionInicio, setHoraRecuperacionInicio] = useState('')
+  const [horaRecuperacionFin, setHoraRecuperacionFin] = useState('')
 
   // Reloj en tiempo real
   useEffect(()=>{
@@ -74,8 +75,6 @@ const [horaRecuperacionFin, setHoraRecuperacionFin] = useState('')
   async function marcarEntrada(){
     if(!persona||registrando) return
     setRegistrando(true)
-    
-    // ✅ HORA AUTOMÁTICA DEL SISTEMA
     const hora = format(new Date(),'HH:mm:ss')
     
     const [he,me]=(persona.hora_ingreso?.slice(0,5)??'08:30').split(':').map(Number)
@@ -92,30 +91,45 @@ const [horaRecuperacionFin, setHoraRecuperacionFin] = useState('')
   async function marcarSalida(){
     if(!persona||!asistHoy||registrando) return
     setRegistrando(true)
-    
-    // ✅ HORA AUTOMÁTICA DEL SISTEMA
     const hora = format(new Date(),'HH:mm:ss')
-    
     await supabase.from('asistencias').update({hora_salida:hora}).eq('id',asistHoy.id)
     setRegistrando(false);load()
   }
 
   async function enviarPermiso(){
-    if(!persona||!motivoPermiso) return
+    if(!persona||!motivoPermiso) {
+      alert('Por favor escribe el motivo')
+      return
+    }
+    
     setEnviandoPermiso(true)
-    await supabase.from('permisos').insert({
-  persona_id: persona.id,
-  tipo: tipoPermiso,
-  fecha_inicio: fechaPermiso,
-  fecha_fin: fechaPermiso,
-  motivo: motivoPermiso,
-  sustento_texto: motivoPermiso,  // Agregamos el sustento como texto
-  dia_recuperacion: necesitaRecuperar ? diaRecuperacion : null,
-  hora_recuperacion_inicio: necesitaRecuperar ? horaRecuperacionInicio : null,
-  hora_recuperacion_fin: necesitaRecuperar ? horaRecuperacionFin : null,
-  estado: 'pendiente'
-})
-    setMotivoPermiso('');setPermisoOk(true);setEnviandoPermiso(false)
+    
+    const permisoData: any = {
+      persona_id: persona.id,
+      tipo: tipoPermiso,
+      fecha_inicio: fechaPermiso,
+      fecha_fin: fechaPermiso,
+      motivo: motivoPermiso,
+      sustento_texto: motivoPermiso,
+      estado: 'pendiente'
+    }
+    
+    // Si necesita recuperar, agregar los campos
+    if (necesitaRecuperar && diaRecuperacion && horaRecuperacionInicio && horaRecuperacionFin) {
+      permisoData.dia_recuperacion = diaRecuperacion
+      permisoData.hora_recuperacion_inicio = horaRecuperacionInicio
+      permisoData.hora_recuperacion_fin = horaRecuperacionFin
+    }
+    
+    await supabase.from('permisos').insert(permisoData)
+    
+    setMotivoPermiso('')
+    setNecesitaRecuperar(false)
+    setDiaRecuperacion('')
+    setHoraRecuperacionInicio('')
+    setHoraRecuperacionFin('')
+    setPermisoOk(true)
+    setEnviandoPermiso(false)
     setTimeout(()=>setPermisoOk(false),3000)
   }
 
@@ -133,7 +147,7 @@ const [horaRecuperacionFin, setHoraRecuperacionFin] = useState('')
   function franjas(dia:string){return horarios.filter(h=>h.dia===dia)}
   function ultimoAvance(tid:string){return avances.filter(a=>a.tarea_id===tid).sort((a,b)=>b.semana.localeCompare(a.semana))[0]}
 
-  const franjasHoy = franjas(diaKey)
+  const franjasHoy = franjas(format(new Date(),'E').toLowerCase().slice(0,1))
   const horarioHoyStr = franjasHoy.length>0
     ? franjasHoy.map(f=>f.hora_entrada.slice(0,5)+'–'+f.hora_salida.slice(0,5)).join(' | ')
     : 'Sin horario hoy'
@@ -147,63 +161,11 @@ const [horaRecuperacionFin, setHoraRecuperacionFin] = useState('')
   const tareasComp    = tareas.filter(t=>t.estado==='completada')
 
   const TIPO_PERMISO: Record<string,string> = {
-    permiso_medico:'🏥 Médico', permiso_personal:'👤 Personal',
-    permiso_academico:'🎓 Académico', falta_justificada:'📋 Falta justificada',
+    permiso_medico:'🏥 Médico',
+    permiso_personal:'👤 Personal',
+    permiso_academico:'🎓 Académico',
+    falta_justificada:'📋 Falta justificada',
   }
-
-{/* Formulario de Permiso */}
-<div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, marginBottom: 16 }}>
-  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>📋 Solicitar Permiso o Recuperación</h3>
-  
-  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-    <div>
-      <label style={{ fontSize: 11, fontWeight: 600, color: '#475569' }}>Tipo de Permiso</label>
-      <select value={tipoPermiso} onChange={e => setTipoPermiso(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #e2e8f0' }}>
-        <option value="permiso_medico">Médico</option>
-        <option value="permiso_personal">Personal</option>
-        <option value="falta_justificada">Falta Justificada</option>
-      </select>
-    </div>
-    <div>
-      <label style={{ fontSize: 11, fontWeight: 600, color: '#475569' }}>Fecha del Evento</label>
-      <input type="date" value={fechaPermiso} onChange={e => setFechaPermiso(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #e2e8f0' }} />
-    </div>
-  </div>
-
-  {/* CHECKBOX PARA RECUPERAR */}
-  <div style={{ marginBottom: 12, padding: 10, background: '#f8fafc', borderRadius: 8 }}>
-    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-      <input type="checkbox" checked={necesitaRecuperar} onChange={e => setNecesitaRecuperar(e.target.checked)} />
-      <span style={{ fontSize: 12, fontWeight: 600 }}>Voy a recuperar las horas el día:</span>
-    </label>
-    {necesitaRecuperar && (
-      <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-        <input type="date" value={diaRecuperacion} onChange={e => setDiaRecuperacion(e.target.value)} style={{ flex: 1, padding: 6, borderRadius: 4, border: '1px solid #e2e8f0' }} />
-        <input type="time" value={horaRecuperacionInicio} onChange={e => setHoraRecuperacionInicio(e.target.value)} style={{ padding: 6, borderRadius: 4, border: '1px solid #e2e8f0' }} />
-        <span style={{ alignSelf: 'center' }}>-</span>
-        <input type="time" value={horaRecuperacionFin} onChange={e => setHoraRecuperacionFin(e.target.value)} style={{ padding: 6, borderRadius: 4, border: '1px solid #e2e8f0' }} />
-      </div>
-    )}
-  </div>
-
-  {/* SUSTENTO (TEXTO) */}
-  <div style={{ marginBottom: 12 }}>
-    <label style={{ fontSize: 11, fontWeight: 600, color: '#475569' }}>Sustento / Motivo (Obligatorio)</label>
-    <textarea 
-      value={motivoPermiso} 
-      onChange={e => setMotivoPermiso(e.target.value)} 
-      rows={3} 
-      placeholder="Ej: Tengo cita con el dentista a las 10am. Recuperaré el viernes por la tarde."
-      style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #e2e8f0' }} 
-    />
-  </div>
-
-  <button onClick={enviarPermiso} style={{ width: '100%', padding: 10, background: '#c9a227', color: 'white', borderRadius: 8, border: 'none', fontWeight: 600, cursor: 'pointer' }}>
-    Enviar Solicitud al Coordinador
-  </button>
-</div>
-  
-
 
   if(loading) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'80vh',flexDirection:'column',gap:14}}>
@@ -237,7 +199,7 @@ const [horaRecuperacionFin, setHoraRecuperacionFin] = useState('')
             <div style={{width:30,height:30,borderRadius:'50%',background:persona.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'white'}}>{persona.nombre.charAt(0)}</div>
             <div>
               <div style={{fontSize:12,fontWeight:600}}>{persona.nombre}</div>
-              <div style={{fontSize:10,color:'rgba(255,255,255,.6)'}}>{persona.rol==='Practicante'?`Practicante · Ing. ${persona.subrol??''}`:persona.rol==='SENATI'?`Practicante SENATI · ${persona.subrol??''}`:persona.rol} · ESAT</div>
+              <div style={{fontSize:10,color:'rgba(255,255,255,.6)'}}>{persona.rol} · {persona.subrol}</div>
             </div>
           </div>
           <button onClick={async()=>{await supabase.auth.signOut();window.location.href='/auth/login'}}
@@ -273,7 +235,7 @@ const [horaRecuperacionFin, setHoraRecuperacionFin] = useState('')
         <div style={{fontSize:52,fontWeight:700,color:'#002F6C',letterSpacing:'-1px',marginBottom:4,fontVariantNumeric:'tabular-nums'}}>{tiempo}</div>
         <div style={{fontSize:13,color:'#94a3b8',marginBottom:18}}>Marca tu asistencia del día de hoy</div>
 
-        {/* Botones - SIN INPUT DE HORA */}
+        {/* Botones */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
           <button onClick={marcarEntrada} disabled={registrando||!!asistHoy?.hora_entrada}
             style={{padding:'16px',borderRadius:12,border:'none',cursor:asistHoy?.hora_entrada?'not-allowed':'pointer',
@@ -289,13 +251,12 @@ const [horaRecuperacionFin, setHoraRecuperacionFin] = useState('')
               background:asistHoy?.hora_salida?'#fee2e2':!asistHoy?.hora_entrada?'#f1f5f9':'#dc2626',
               color:asistHoy?.hora_salida?'#b91c1c':!asistHoy?.hora_entrada?'#94a3b8':'white',
               fontFamily:'inherit',fontWeight:700,fontSize:14,opacity:registrando?.7:1,transition:'all .2s'}}>
-            <div style={{fontSize:22,marginBottom:4}}>{asistHoy?.hora_salida?'🚪':'🚪'}</div>
+            <div style={{fontSize:22,marginBottom:4}}>{asistHoy?.hora_salida?'🚪':''}</div>
             <div>Marcar Salida</div>
             <div style={{fontSize:11,fontWeight:400,opacity:.8,marginTop:2}}>{asistHoy?.hora_salida?`Registrada: ${asistHoy.hora_salida.slice(0,5)}`:'Registrar partida'}</div>
           </button>
         </div>
 
-        {/* Estado */}
         {asistHoy&&(
           <div style={{padding:'10px 16px',background:'#f0fdf4',borderRadius:9,border:'1px solid #86efac',fontSize:13,color:'#15803d',fontWeight:500,marginBottom:10}}>
             ✅ Asistencia registrada — Entrada: {asistHoy.hora_entrada?.slice(0,5)}
@@ -311,7 +272,7 @@ const [horaRecuperacionFin, setHoraRecuperacionFin] = useState('')
         )}
       </div>
 
-      {/* Solicitar permiso */}
+      {/* Solicitar permiso - ACTUALIZADO */}
       <div style={{background:'white',borderRadius:16,border:'1.5px solid #e2e8f0',padding:'20px 24px',marginBottom:16,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
           <span style={{fontSize:22}}>📋</span>
@@ -320,27 +281,52 @@ const [horaRecuperacionFin, setHoraRecuperacionFin] = useState('')
             <div style={{fontSize:12,color:'#94a3b8'}}>Tu coordinador recibirá la solicitud para aprobarla</div>
           </div>
         </div>
+        
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
           <div>
-            <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase',letterSpacing:'.04em'}}>Tipo</label>
+            <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5}}>Tipo</label>
             <select value={tipoPermiso} onChange={e=>setTipoPermiso(e.target.value)}
-              style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13,outline:'none'}}>
+              style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
               {Object.entries(TIPO_PERMISO).map(([k,v])=><option key={k} value={k}>{v}</option>)}
             </select>
           </div>
           <div>
-            <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase',letterSpacing:'.04em'}}>Fecha</label>
+            <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5}}>Fecha</label>
             <input type="date" value={fechaPermiso} onChange={e=>setFechaPermiso(e.target.value)}
-              style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13,outline:'none'}}/>
+              style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
           </div>
         </div>
-        <div style={{marginBottom:14}}>
-          <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase',letterSpacing:'.04em'}}>Motivo y recuperación (si aplica)</label>
+
+        {/* CHECKBOX RECUPERACIÓN */}
+        <div style={{marginBottom:12,padding:10,background:'#f8fafc',borderRadius:8}}>
+          <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+            <input type="checkbox" checked={necesitaRecuperar} onChange={e=>setNecesitaRecuperar(e.target.checked)}
+              style={{width:16,height:16,accentColor:'#002F6C'}} />
+            <span style={{fontSize:12,fontWeight:600}}>Voy a recuperar las horas el día:</span>
+          </label>
+          {necesitaRecuperar && (
+            <div style={{marginTop:8,display:'flex',gap:8}}>
+              <input type="date" value={diaRecuperacion} onChange={e=>setDiaRecuperacion(e.target.value)}
+                style={{flex:1,padding:6,borderRadius:4,border:'1px solid #e2e8f0'}} />
+              <input type="time" value={horaRecuperacionInicio} onChange={e=>setHoraRecuperacionInicio(e.target.value)}
+                style={{padding:6,borderRadius:4,border:'1px solid #e2e8f0'}} />
+              <span style={{alignSelf:'center'}}>-</span>
+              <input type="time" value={horaRecuperacionFin} onChange={e=>setHoraRecuperacionFin(e.target.value)}
+                style={{padding:6,borderRadius:4,border:'1px solid #e2e8f0'}} />
+            </div>
+          )}
+        </div>
+
+        {/* SUSTENTO TEXTO */}
+        <div style={{marginBottom:12}}>
+          <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5}}>Sustento / Motivo (Obligatorio)</label>
           <textarea value={motivoPermiso} onChange={e=>setMotivoPermiso(e.target.value)} rows={3}
             placeholder="Ej: Tengo cita médica de 9am a 11am. Recuperaré el viernes de 4pm a 6pm."
-            style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13,outline:'none',resize:'vertical'}}/>
+            style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
         </div>
+
         {permisoOk&&<div style={{padding:'8px 14px',background:'#dcfce7',borderRadius:8,fontSize:12,color:'#15803d',fontWeight:600,marginBottom:10}}>✅ Solicitud enviada al coordinador</div>}
+        
         <button onClick={enviarPermiso} disabled={enviandoPermiso||!motivoPermiso}
           style={{width:'100%',padding:'13px',background:'#c9a227',color:'white',border:'none',borderRadius:10,fontFamily:'inherit',fontSize:14,fontWeight:700,cursor:motivoPermiso?'pointer':'not-allowed',opacity:(!motivoPermiso||enviandoPermiso)?.6:1}}>
           📨 {enviandoPermiso?'Enviando...':'Enviar solicitud al coordinador'}
@@ -412,12 +398,12 @@ const [horaRecuperacionFin, setHoraRecuperacionFin] = useState('')
             </div>
             <div style={{marginBottom:14,padding:'10px 14px',background:'#eff6ff',borderRadius:9,fontSize:13,fontWeight:600,color:'#002F6C'}}>{mTarea.titulo}</div>
             <div style={{marginBottom:12}}>
-              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase',letterSpacing:'.04em'}}>Semana</label>
+              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Semana</label>
               <input value={mSem} onChange={e=>setMSem(e.target.value)} placeholder="Ej: Sem 19 (5-9 may)"
-                style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13,outline:'none'}}/>
+                style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
             </div>
             <div style={{marginBottom:8}}>
-              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase',letterSpacing:'.04em'}}>Avance: {mPct}%</label>
+              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Avance: {mPct}%</label>
               <input type="range" min={0} max={100} step={5} value={mPct} onChange={e=>setMPct(+e.target.value)} style={{width:'100%',accentColor:'#002F6C'}}/>
             </div>
             <div style={{height:8,background:'#e2e8f0',borderRadius:10,overflow:'hidden',marginBottom:16}}>
