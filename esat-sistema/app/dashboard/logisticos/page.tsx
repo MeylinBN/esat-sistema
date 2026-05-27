@@ -16,12 +16,18 @@ export default function DashboardLogisticoPage() {
   const [permisos, setPermisos] = useState<any[]>([])
   const [tareas, setTareas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // Estados para Flexibilidad Horaria
+  const [modalFlex, setModalFlex] = useState(false)
+  const [flexPersona, setFlexPersona] = useState('')
+  const [flexFecha, setFlexFecha] = useState('')
+  const [flexMinutos, setFlexMinutos] = useState('15')
+  const [flexMotivo, setFlexMotivo] = useState('')
 
   useEffect(()=>{load()},[])
 
   async function load(){
-    // 1. Obtener datos del coordinador logueado
-   const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
     if(!user) return
 
     const { data: coordData } = await supabase
@@ -32,14 +38,10 @@ export default function DashboardLogisticoPage() {
     
     setCoordinador(coordData)
 
-    // 2. Determinar qué grupo supervisa
-    // Francisco (DNI: 70189681) → EcoBIOTEM
-    // Otros (Pamela, Hairo) → ESAT
     const esFrancisco = coordData?.dni === '70189681'
     const grupoAsignado = esFrancisco ? 'EcoBIOTEM' : 'ESAT'
     const rolFiltro = esFrancisco ? 'EcoBIOTEM' : ['Practicante','SENATI','Voluntario','Asistente']
 
-    // 3. Cargar datos del equipo asignado
     const [p, ah, perm, tar] = await Promise.all([
       supabase.from('personas')
         .select('*')
@@ -62,7 +64,6 @@ export default function DashboardLogisticoPage() {
         .limit(10),
     ])
 
-    // 4. Filtrar asistencias solo del equipo
     const personasIds = p.data?.map(x=>x.id) || []
     const asistFiltrada = ah.data?.filter(a=>personasIds.includes(a.persona_id)) || []
 
@@ -73,7 +74,37 @@ export default function DashboardLogisticoPage() {
     setLoading(false)
   }
 
-  // Métricas
+  async function aprobarPermiso(id: string, estado: string) {
+    await supabase.from('permisos').update({
+      estado: estado,
+      recuperacion_aprobada: estado === 'aprobado',
+      revisado_por: coordinador?.id
+    }).eq('id', id)
+    load()
+  }
+
+  async function guardarFlexibilidad() {
+    if(!flexPersona || !flexFecha || !flexMotivo) {
+      alert('Completa todos los campos')
+      return
+    }
+    
+    await supabase.from('flexibilidad_horaria').insert({
+      persona_id: flexPersona,
+      fecha: flexFecha,
+      minutos_gracia: parseInt(flexMinutos),
+      motivo: flexMotivo,
+      autorizado_por: coordinador?.id
+    })
+    
+    setModalFlex(false)
+    setFlexPersona('')
+    setFlexFecha('')
+    setFlexMinutos('15')
+    setFlexMotivo('')
+    alert('Flexibilidad registrada correctamente')
+  }
+
   const presentes = asistHoy.filter(a=>['presente','tarde'].includes(a.estado)).length
   const tardanzas = asistHoy.filter(a=>a.estado==='tarde').length
   const permisosPendientes = permisos.length
@@ -87,22 +118,22 @@ export default function DashboardLogisticoPage() {
       {/* Header */}
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24,flexWrap:'wrap',gap:12}}>
         <div>
-         <h1 style={{ fontSize: 22, fontWeight: 700, color: '#002F6C' }}>
-  Dashboard de Gestión del Equipo
-</h1>
-<p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-  Control de asistencias, permisos y avances del equipo
-</p>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#002F6C' }}>
+            Dashboard de Gestión del Equipo
+          </h1>
+          <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
+            Control de asistencias, permisos y avances del equipo
+          </p>
         </div>
-       <button onClick={async ()=>{
-  await supabase.auth.signOut()
-  window.location.href='/auth/login'
-}} style={{
-  background:'#dc2626',color:'white',padding:'8px 16px',
-  border:'none',borderRadius:8,cursor:'pointer',fontWeight:600
-}}>
-  Cerrar Sesión
-</button>
+        <button onClick={async ()=>{
+          await supabase.auth.signOut()
+          window.location.href='/auth/login'
+        }} style={{
+          background:'#dc2626',color:'white',padding:'8px 16px',
+          border:'none',borderRadius:8,cursor:'pointer',fontWeight:600
+        }}>
+          Cerrar Sesión
+        </button>
       </div>
 
       {/* Banner informativo */}
@@ -245,26 +276,25 @@ export default function DashboardLogisticoPage() {
                 <div style={{fontSize:11,color:'#475569',marginBottom:4}}>
                   📅 {perm.fecha_inicio} · {perm.tipo}
                 </div>
-                {perm.motivo && (
-                  <div style={{fontSize:11,color:'#64748b',fontStyle:'italic'}}>
-                    "{perm.motivo}"
+                {perm.sustento_texto && (
+                  <div style={{fontSize:11,color:'#64748b',fontStyle:'italic',marginBottom:4}}>
+                    "{perm.sustento_texto}"
+                  </div>
+                )}
+                {perm.dia_recuperacion && (
+                  <div style={{fontSize:10,color:'#1e40af',background:'#eff6ff',padding:'4px 8px',borderRadius:4,display:'inline-block',marginBottom:6}}>
+                    🔄 Recuperación: {format(new Date(perm.dia_recuperacion), 'dd/MM')} de {perm.hora_recuperacion_inicio?.slice(0,5)} a {perm.hora_recuperacion_fin?.slice(0,5)}
                   </div>
                 )}
                 <div style={{display:'flex',gap:6,marginTop:8}}>
-                  <button onClick={async ()=>{
-                    await supabase.from('permisos').update({estado:'aprobado'}).eq('id',perm.id)
-                    load()
-                  }} style={{
+                  <button onClick={()=>aprobarPermiso(perm.id,'aprobado')} style={{
                     padding:'4px 10px',background:'#dcfce7',color:'#15803d',
                     border:'1px solid #86efac',borderRadius:6,fontSize:10,
                     cursor:'pointer',fontWeight:600
                   }}>
                     ✓ Aprobar
                   </button>
-                  <button onClick={async ()=>{
-                    await supabase.from('permisos').update({estado:'rechazado'}).eq('id',perm.id)
-                    load()
-                  }} style={{
+                  <button onClick={()=>aprobarPermiso(perm.id,'rechazado')} style={{
                     padding:'4px 10px',background:'#fee2e2',color:'#b91c1c',
                     border:'1px solid #fca5a5',borderRadius:6,fontSize:10,
                     cursor:'pointer',fontWeight:600
@@ -281,6 +311,22 @@ export default function DashboardLogisticoPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Flexibilidad Horaria - NUEVA SECCIÓN */}
+      <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)', marginBottom: 16}}>
+        <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <span style={{display:'flex',alignItems:'center',gap:8}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:'#8b5cf6'}}/>
+            ⏰ Flexibilidad Horaria
+          </span>
+          <button onClick={() => setModalFlex(true)} style={{fontSize:11,color:'#002F6C',background:'none',border:'none',cursor:'pointer',fontWeight:500}}>
+            + Registrar flexibilidad
+          </button>
+        </div>
+        <p style={{fontSize:12,color:'#64748b',marginBottom:12}}>
+          Permite que personas específicas lleguen tarde un día sin que se marque como tardanza.
+        </p>
       </div>
 
       {/* Tareas activas */}
@@ -335,6 +381,45 @@ export default function DashboardLogisticoPage() {
           )}
         </div>
       </div>
+
+      {/* Modal Flexibilidad Horaria */}
+      {modalFlex && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999}} onClick={()=>setModalFlex(false)}>
+          <div style={{background:'white',padding:24,borderRadius:12,width:400,maxWidth:'90%'}} onClick={e=>e.stopPropagation()}>
+            <h3 style={{marginBottom:16,fontSize:16,fontWeight:600}}>Registrar Flexibilidad Horaria</h3>
+            
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Persona</label>
+              <select value={flexPersona} onChange={e=>setFlexPersona(e.target.value)} style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}}>
+                <option value="">Seleccionar...</option>
+                {personas.map(p => (
+                  <option key={p.id} value={p.id}>{p.nombre}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Fecha</label>
+              <input type="date" value={flexFecha} onChange={e=>setFlexFecha(e.target.value)} style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}} />
+            </div>
+            
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Minutos de Gracia</label>
+              <input type="number" value={flexMinutos} onChange={e=>setFlexMinutos(e.target.value)} placeholder="15" style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}} />
+            </div>
+            
+            <div style={{marginBottom:16}}>
+              <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Motivo</label>
+              <textarea value={flexMotivo} onChange={e=>setFlexMotivo(e.target.value)} rows={3} placeholder="Ej: Reunión general de ESAT" style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}} />
+            </div>
+            
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <button onClick={()=>setModalFlex(false)} style={{padding:'8px 16px',borderRadius:6,border:'1px solid #e2e8f0',background:'white',cursor:'pointer'}}>Cancelar</button>
+              <button onClick={guardarFlexibilidad} style={{padding:'8px 16px',borderRadius:6,border:'none',background:'#002F6C',color:'white',cursor:'pointer'}}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

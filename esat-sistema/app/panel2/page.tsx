@@ -11,6 +11,10 @@ export default function MiPanelPage() {
   const hoy = format(new Date(),'yyyy-MM-dd')
   const diaKey = DIAS[new Date().getDay()]
   const [tiempo, setTiempo] = useState(format(new Date(),'HH:mm'))
+  const [necesitaRecuperar, setNecesitaRecuperar] = useState(false)
+const [diaRecuperacion, setDiaRecuperacion] = useState('')
+const [horaRecuperacionInicio, setHoraRecuperacionInicio] = useState('')
+const [horaRecuperacionFin, setHoraRecuperacionFin] = useState('')
 
   const [persona,    setPersona]    = useState<any>(null)
   const [horarios,   setHorarios]   = useState<any[]>([])
@@ -100,10 +104,17 @@ export default function MiPanelPage() {
     if(!persona||!motivoPermiso) return
     setEnviandoPermiso(true)
     await supabase.from('permisos').insert({
-      persona_id:persona.id,tipo:tipoPermiso,
-      fecha_inicio:fechaPermiso,fecha_fin:fechaPermiso,
-      motivo:motivoPermiso,estado:'pendiente'
-    })
+  persona_id: persona.id,
+  tipo: tipoPermiso,
+  fecha_inicio: fechaPermiso,
+  fecha_fin: fechaPermiso,
+  motivo: motivoPermiso,
+  sustento_texto: motivoPermiso,  // Agregamos el sustento como texto
+  dia_recuperacion: necesitaRecuperar ? diaRecuperacion : null,
+  hora_recuperacion_inicio: necesitaRecuperar ? horaRecuperacionInicio : null,
+  hora_recuperacion_fin: necesitaRecuperar ? horaRecuperacionFin : null,
+  estado: 'pendiente'
+})
     setMotivoPermiso('');setPermisoOk(true);setEnviandoPermiso(false)
     setTimeout(()=>setPermisoOk(false),3000)
   }
@@ -139,6 +150,60 @@ export default function MiPanelPage() {
     permiso_medico:'🏥 Médico', permiso_personal:'👤 Personal',
     permiso_academico:'🎓 Académico', falta_justificada:'📋 Falta justificada',
   }
+
+{/* Formulario de Permiso */}
+<div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, marginBottom: 16 }}>
+  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>📋 Solicitar Permiso o Recuperación</h3>
+  
+  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+    <div>
+      <label style={{ fontSize: 11, fontWeight: 600, color: '#475569' }}>Tipo de Permiso</label>
+      <select value={tipoPermiso} onChange={e => setTipoPermiso(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #e2e8f0' }}>
+        <option value="permiso_medico">Médico</option>
+        <option value="permiso_personal">Personal</option>
+        <option value="falta_justificada">Falta Justificada</option>
+      </select>
+    </div>
+    <div>
+      <label style={{ fontSize: 11, fontWeight: 600, color: '#475569' }}>Fecha del Evento</label>
+      <input type="date" value={fechaPermiso} onChange={e => setFechaPermiso(e.target.value)} style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #e2e8f0' }} />
+    </div>
+  </div>
+
+  {/* CHECKBOX PARA RECUPERAR */}
+  <div style={{ marginBottom: 12, padding: 10, background: '#f8fafc', borderRadius: 8 }}>
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+      <input type="checkbox" checked={necesitaRecuperar} onChange={e => setNecesitaRecuperar(e.target.checked)} />
+      <span style={{ fontSize: 12, fontWeight: 600 }}>Voy a recuperar las horas el día:</span>
+    </label>
+    {necesitaRecuperar && (
+      <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+        <input type="date" value={diaRecuperacion} onChange={e => setDiaRecuperacion(e.target.value)} style={{ flex: 1, padding: 6, borderRadius: 4, border: '1px solid #e2e8f0' }} />
+        <input type="time" value={horaRecuperacionInicio} onChange={e => setHoraRecuperacionInicio(e.target.value)} style={{ padding: 6, borderRadius: 4, border: '1px solid #e2e8f0' }} />
+        <span style={{ alignSelf: 'center' }}>-</span>
+        <input type="time" value={horaRecuperacionFin} onChange={e => setHoraRecuperacionFin(e.target.value)} style={{ padding: 6, borderRadius: 4, border: '1px solid #e2e8f0' }} />
+      </div>
+    )}
+  </div>
+
+  {/* SUSTENTO (TEXTO) */}
+  <div style={{ marginBottom: 12 }}>
+    <label style={{ fontSize: 11, fontWeight: 600, color: '#475569' }}>Sustento / Motivo (Obligatorio)</label>
+    <textarea 
+      value={motivoPermiso} 
+      onChange={e => setMotivoPermiso(e.target.value)} 
+      rows={3} 
+      placeholder="Ej: Tengo cita con el dentista a las 10am. Recuperaré el viernes por la tarde."
+      style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #e2e8f0' }} 
+    />
+  </div>
+
+  <button onClick={enviarPermiso} style={{ width: '100%', padding: 10, background: '#c9a227', color: 'white', borderRadius: 8, border: 'none', fontWeight: 600, cursor: 'pointer' }}>
+    Enviar Solicitud al Coordinador
+  </button>
+</div>
+  
+
 
   if(loading) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'80vh',flexDirection:'column',gap:14}}>
