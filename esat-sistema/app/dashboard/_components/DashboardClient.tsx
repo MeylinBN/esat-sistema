@@ -92,8 +92,8 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
         <div>
           <h1 style={{fontSize:24,fontWeight:700,color:'#0f172a'}}>Dashboard</h1>
           <p style={{fontSize:13,color:'#94a3b8',marginTop:2}}>
-            Bienvenido, {nombre} · {format(new Date(),"EEEE, d 'de' MMMM 'de' yyyy",{locale:es})}
-          </p>
+  Bienvenido, {nombre} · {format(new Date(),"EEEE d 'de' MMMM 'del' yyyy",{locale:es})}
+</p>
         </div>
         <div style={{display:'flex',gap:8}}>
           <a href="/dashboard/exportar" style={{padding:'8px 16px',background:'white',border:'1.5px solid #e2e8f0',borderRadius:9,fontSize:13,fontWeight:600,color:'#475569',textDecoration:'none',display:'flex',alignItems:'center',gap:6}}>📊 Exportar</a>
@@ -102,13 +102,18 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
       </div>
 
       {/* Banner ESAT */}
-      <div style={{background:'linear-gradient(135deg,#002F6C,#1249A0)',borderRadius:14,padding:'20px 28px',marginBottom:20,color:'white',display:'flex',alignItems:'center',gap:16}}>
-        <div style={{width:44,height:44,borderRadius:10,background:'rgba(255,255,255,.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>💼</div>
-        <div>
-          <div style={{fontSize:17,fontWeight:700}}>ESAT-FCAM · CIAD-FCAM · UNASAM</div>
-          <div style={{fontSize:12,color:'rgba(255,255,255,.65)',marginTop:2}}>ESAT-FCAM · CIAD-FCAM · GI GAMH · PAMEC · EcoBIOTEM · Huaraz, Áncash</div>
-        </div>
-      </div>
+      {/* Banner - Puntos 5 y 7 */}
+<div style={{background:'linear-gradient(135deg,#002F6C,#1249A0)',borderRadius:14,padding:'20px 28px',marginBottom:20,color:'white',display:'flex',alignItems:'center',gap:16}}>
+  <div style={{width:44,height:44,borderRadius:10,background:'rgba(255,255,255,.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>💼</div>
+  <div>
+    <div style={{fontSize:15,fontWeight:700,lineHeight:1.3}}>
+      Sistema Integral de Gestión de Asistencias y Actividades del Equipo
+    </div>
+    <div style={{fontSize:12,color:'rgba(255,255,255,.65)',marginTop:4}}>
+      Equipo Técnico y Administrativo · Huaraz, Áncash
+    </div>
+  </div>
+</div>
 
       {/* Métricas */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14,marginBottom:20}}>

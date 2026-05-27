@@ -46,10 +46,10 @@ export default function LoginPage() {
         borderRadius: 20,
         padding: '32px 28px',
         width: '100%',
-        maxWidth: 420,
+        maxWidth: 450,
         boxShadow: '0 32px 80px rgba(0,0,0,.35)'
       }}>
-        {/* Botón Volver - DENTRO de la tarjeta */}
+        {/* Botón Volver */}
         <button
           onClick={() => router.push('/')}
           style={{
@@ -74,11 +74,11 @@ export default function LoginPage() {
 
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>🔐</div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: '#002F6C', margin: 0 }}>
-            ESAT · CIAD
+          <h1 style={{ fontSize: 18, fontWeight: 700, color: '#002F6C', margin: 0, lineHeight: 1.3 }}>
+            Sistema Integral de Gestión de Asistencias y Actividades del Equipo
           </h1>
-          <p style={{ fontSize: 12, color: '#94a3b8', margin: '4px 0 0' }}>
-            Sistema de Gestión del Equipo
+          <p style={{ fontSize: 12, color: '#94a3b8', margin: '8px 0 0' }}>
+            ESAT-FCAM · CIAD-FCAM
           </p>
         </div>
 

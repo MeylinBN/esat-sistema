@@ -46,18 +46,22 @@ export default function AvisosPage() {
 
   async function eliminar(id:string){
     if(!confirm('¿Eliminar este aviso?')) return
-    await supabase.from('avisos').delete().eq('id',id);load()
+    await supabase.from('avisos').delete().eq('id',idgit add .
+git commit -m "feat: avance semanal con calculo automatico y dropdown inteligente"
+git push origin main);load()S
   }
-
-  const TABS = ['Todos','Horarios','Permisos','Anuncios','Urgentes']
-  const filtrados = avisos.filter(a=>{
-    if(filtro==='Todos') return true
-    if(filtro==='Horarios')  return a.tipo==='horario'
-    if(filtro==='Permisos')  return a.tipo==='permiso'
-    if(filtro==='Anuncios')  return a.tipo==='anuncio'
-    if(filtro==='Urgentes')  return a.urgente
+S
+    // Tabs y Filtros
+  const TABS = ['Todos', 'Anuncios', 'Permisos', 'Horarios', 'Recordatorios', 'Urgentes']
+  const filtrados = avisos.filter(a => {
+    if (filtro === 'Todos') return true
+    if (filtro === 'Anuncios') return a.tipo === 'anuncio'
+    if (filtro === 'Permisos') return a.tipo === 'permiso'
+    if (filtro === 'Horarios') return a.tipo === 'horario'
+    if (filtro === 'Recordatorios') return a.tipo === 'recordatorio'
+    if (filtro === 'Urgentes') return a.urgente || a.tipo === 'urgente'
     return true
-  })
+  })SS
 
   // Calendario
   const diasEnMes = new Date(anioVer,mesVer+1,0).getDate()

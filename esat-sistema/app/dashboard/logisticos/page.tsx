@@ -87,10 +87,12 @@ export default function DashboardLogisticoPage() {
       {/* Header */}
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24,flexWrap:'wrap',gap:12}}>
         <div>
-          <h1 style={{fontSize:24,fontWeight:700,color:'#002F6C',margin:'0 0 4px'}}>Dashboard Logístico</h1>
-          <p style={{fontSize:13,color:'#64748b',margin:0}}>
-            Gestión de tareas, permisos y avances del equipo · {coordinador?.nombre}
-          </p>
+         <h1 style={{ fontSize: 22, fontWeight: 700, color: '#002F6C' }}>
+  Dashboard de Gestión del Equipo
+</h1>
+<p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
+  Control de asistencias, permisos y avances del equipo
+</p>
         </div>
        <button onClick={async ()=>{
   await supabase.auth.signOut()
