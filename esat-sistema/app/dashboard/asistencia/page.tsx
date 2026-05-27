@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 const DIAS: Record<number,string> = {1:'L',2:'M',3:'X',4:'J',5:'V',6:'S',0:'D'}
+
 const GRUPOS = [
   {key:'Practicante', label:'🎓 Practicantes UNASAM', color:'#1e40af'},
   {key:'SENATI',      label:'🔧 Practicantes Externos (SENATI)', color:'#92400e'},
@@ -44,9 +45,15 @@ export default function AsistenciaPage() {
   const [modal, setModal]             = useState(false)
   const [mPerId, setMPerId]           = useState('')
   const [mTipo, setMTipo]             = useState<'entrada'|'salida'>('entrada')
+  const [mHora, setMHora]             = useState(format(new Date(),'HH:mm'))
+  const [mEstado, setMEstado]         = useState('presente')
   const [mObs, setMObs]               = useState('')
   const [saving, setSaving]           = useState(false)
   const [verLista, setVerLista]       = useState(false)
+  
+  // Estados para recuperación de horas
+  const [esRecuperacion, setEsRecuperacion] = useState(false)
+  const [motivoRecuperacion, setMotivoRecuperacion] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -73,42 +80,48 @@ export default function AsistenciaPage() {
     if(!mPerId){return}
     setSaving(true)
     
-    // ✅ HORA AUTOMÁTICA DEL SISTEMA
-    const ahora = format(new Date(),'HH:mm:ss')
-    
+    const hora = hora+':00'
     const asist = getA(mPerId)
     const persona = personas.find(p=>p.id===mPerId)
-    let tard=0
     
-    if(persona?.hora_ingreso&&mTipo==='entrada'){
+    let tard=0
+    if(persona?.hora_ingreso&&mTipo==='entrada' && !esRecuperacion){
       const [hE,mE]=persona.hora_ingreso.split(':').map(Number)
-      const [hR,mR]=ahora.split(':').map(Number)
+      const [hR,mR]=mHora.split(':').map(Number)
       tard=Math.max(0,(hR*60+mR)-(hE*60+mE)-(persona.tolerancia??10))
     }
     
     if(!asist){
-      const estado = mTipo==='entrada' ? (tard>0?'tarde':'presente') : 'presente'
+      const estado = mEstado!=='presente' ? mEstado : (esRecuperacion ? 'presente' : tard>0?'tarde':'presente')
       await supabase.from('asistencias').insert({
         persona_id:mPerId,fecha:hoy,
-        hora_entrada:mTipo==='entrada'?ahora:null,
-        hora_salida:mTipo==='salida'?ahora:null,
+        hora_entrada:mTipo==='entrada'?hora:null,
+        hora_salida:mTipo==='salida'?hora:null,
+        hora_recuperacion: esRecuperacion ? hora : null,
+        recuperacion_motivo: esRecuperacion ? motivoRecuperacion : null,
+        recuperacion_aprobada: esRecuperacion ? false : null,
         estado,tardanza_min:tard,observacion:mObs||null
       })
     } else {
       const upd:any={observacion:mObs||asist.observacion}
       if(mTipo==='entrada'){
-        upd.hora_entrada=ahora
-        if(tard>0) upd.estado='tarde'
+        upd.hora_entrada=hora
+        if(esRecuperacion){
+          upd.hora_recuperacion = hora
+          upd.recuperacion_motivo = motivoRecuperacion
+          upd.recuperacion_aprobada = false
+        }
+        if(tard>0)upd.estado='tarde'
       } else {
-        upd.hora_salida=ahora
+        upd.hora_salida=hora
+        if(esRecuperacion){
+          upd.hora_recuperacion = hora
+          upd.recuperacion_motivo = motivoRecuperacion
+        }
       }
       await supabase.from('asistencias').update(upd).eq('id',asist.id)
     }
-    
-    setModal(false)
-    setMObs('')
-    setSaving(false)
-    load()
+    setModal(false);setMObs('');setEsRecuperacion(false);setMotivoRecuperacion('');setSaving(false);load()
   }
 
   const esat  = personas.filter(p=>p.grupo==='ESAT')
@@ -125,9 +138,9 @@ export default function AsistenciaPage() {
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:22,flexWrap:'wrap',gap:12}}>
         <div>
           <h1 style={{fontFamily:'Lora,serif',fontSize:24,color:'#002F6C',fontWeight:600}}>Control de asistencia</h1>
-        <p style={{fontSize:12,color:'#475569',marginTop:3,textTransform:'capitalize'}}>
-  {format(new Date(),"EEEE d 'de' MMMM 'del' yyyy",{locale:es})}
-</p>
+          <p style={{fontSize:12,color:'#475569',marginTop:3,textTransform:'capitalize'}}>
+            {format(new Date(),"EEEE d 'de' MMMM 'del' yyyy",{locale:es})}
+          </p>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           <button onClick={()=>setVerLista(!verLista)} style={{padding:'8px 16px',background:'white',border:'1.5px solid #e2e8f0',borderRadius:8,cursor:'pointer',fontWeight:600}}>{verLista?'Ver tarjetas':'Ver lista completa'}</button>
@@ -294,10 +307,10 @@ export default function AsistenciaPage() {
         </div>
       )}
 
-      {/* Modal SIMPLIFICADO - Sin reloj manual */}
+      {/* Modal con recuperación de horas */}
       {modal&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>{if(e.target===e.currentTarget)setModal(false)}}>
-          <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:400,boxShadow:'0 24px 80px rgba(0,0,0,.25)'}}>
+          <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:450,boxShadow:'0 24px 80px rgba(0,0,0,.25)',maxHeight:'90vh',overflowY:'auto'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
               <h3 style={{fontSize:16,fontWeight:700,margin:0}}>Registrar asistencia</h3>
               <button onClick={()=>setModal(false)} style={{width:28,height:28,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
@@ -346,6 +359,40 @@ export default function AsistenciaPage() {
                 </button>
               </div>
             </div>
+
+            {/* Checkbox de recuperación */}
+            <div style={{marginBottom:12}}>
+              <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+                <input 
+                  type="checkbox" 
+                  checked={esRecuperacion}
+                  onChange={e=>setEsRecuperacion(e.target.checked)}
+                  style={{width:16,height:16,accentColor:'#002F6C'}}
+                />
+                <span style={{fontSize:12,fontWeight:600,color:'#475569'}}>
+                  🕐 Hora de recuperación (fuera de horario)
+                </span>
+              </label>
+            </div>
+
+            {/* Motivo de recuperación */}
+            {esRecuperacion && (
+              <div style={{marginBottom:12,padding:'10px 12px',background:'#eff6ff',borderRadius:9,border:'1px solid #bfdbfe'}}>
+                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#1e40af',marginBottom:6}}>
+                  Motivo de recuperación:
+                </label>
+                <textarea 
+                  value={motivoRecuperacion}
+                  onChange={e=>setMotivoRecuperacion(e.target.value)}
+                  placeholder="Ej: Recuperación de hora del martes 20/05"
+                  rows={2}
+                  style={{width:'100%',padding:'8px',border:'1px solid #bfdbfe',borderRadius:6,fontSize:12,fontFamily:'inherit'}}
+                />
+                <p style={{fontSize:10,color:'#64748b',marginTop:4}}>
+                  ℹ️ Esta hora se registrará pero requerirá aprobación del coordinador
+                </p>
+              </div>
+            )}
             
             <div style={{marginBottom:16}}>
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Observación (opcional)</label>
