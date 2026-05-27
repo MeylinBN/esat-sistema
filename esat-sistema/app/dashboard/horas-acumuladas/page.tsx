@@ -14,7 +14,6 @@ export default function HorasAcumuladasPage() {
   const [personaSel, setPersonaSel] = useState<string>('')
   const [mesSel, setMesSel] = useState(format(new Date(), 'yyyy-MM'))
 
-  // ✅ ÚNICO useEffect que carga todos los datos
   useEffect(() => {
     load()
   }, [])
@@ -27,7 +26,6 @@ export default function HorasAcumuladasPage() {
         supabase.from('horarios').select('*'),
       ])
       
-      // ✅ Manejo de errores
       if (p.error) throw p.error
       if (a.error) throw a.error
       if (h.error) throw h.error
@@ -56,7 +54,7 @@ export default function HorasAcumuladasPage() {
     return `${h}h ${m}min`
   }
 
-  // Filtrar personas por grupo
+  // Filtrar personas por grupo seleccionado
   const personasFiltradas = personas.filter(p => {
     if (filtroGrupo === 'todos') return true
     return p.grupo === filtroGrupo
@@ -77,13 +75,14 @@ export default function HorasAcumuladasPage() {
     porPersona[a.persona_id].push(a)
   })
 
-  // Calcular totales
+  // Calcular totales DINÁMICOS según el filtro
   const stats = {
     totalPersonas: Object.keys(porPersona).length,
     totalHoras: Object.values(porPersona).flat().reduce((acc: number, a: any) => 
       acc + calcularHorasDia(a.hora_entrada?.slice(0,5), a.hora_salida?.slice(0,5)), 0
     ),
-    ecoBIOTEM: personas.filter(p => p.grupo === 'EcoBIOTEM' && porPersona[p.id]).length
+    ecoBIOTEM: filtroGrupo === 'ESAT' ? 0 : personas.filter(p => p.grupo === 'EcoBIOTEM' && porPersona[p.id]).length,
+    esat: filtroGrupo === 'EcoBIOTEM' ? 0 : personas.filter(p => p.grupo === 'ESAT' && porPersona[p.id]).length
   }
 
   if (loading) return <div style={{ padding:40, textAlign:'center', color:'#94a3b8' }}>Cargando horas acumuladas...</div>
@@ -124,8 +123,8 @@ export default function HorasAcumuladasPage() {
         </select>
       </div>
 
-      {/* Stats */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14, marginBottom:20 }}>
+      {/* Stats - Mostramos solo las relevantes según el filtro */}
+      <div style={{ display:'grid', gridTemplateColumns: filtroGrupo === 'todos' ? 'repeat(3,1fr)' : 'repeat(2,1fr)', gap:14, marginBottom:20 }}>
         <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #e2e8f0' }}>
           <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>Personas activas</div>
           <div style={{ fontSize:28, fontWeight:700, color:'#002F6C' }}>{stats.totalPersonas}</div>
@@ -134,10 +133,22 @@ export default function HorasAcumuladasPage() {
           <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>Total horas mes</div>
           <div style={{ fontSize:28, fontWeight:700, color:'#15803d' }}>{formatoHoras(stats.totalHoras)}</div>
         </div>
-        <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #166534' }}>
-          <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>EcoBIOTEM</div>
-          <div style={{ fontSize:28, fontWeight:700, color:'#166534' }}>{stats.ecoBIOTEM} miembros</div>
-        </div>
+        
+        {/* Solo mostrar EcoBIOTEM si no estamos filtrando por ESAT */}
+        {filtroGrupo !== 'ESAT' && (
+          <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #166534' }}>
+            <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>EcoBIOTEM</div>
+            <div style={{ fontSize:28, fontWeight:700, color:'#166534' }}>{stats.ecoBIOTEM} miembros</div>
+          </div>
+        )}
+        
+        {/* Solo mostrar ESAT si no estamos filtrando por EcoBIOTEM */}
+        {filtroGrupo !== 'EcoBIOTEM' && stats.esat > 0 && (
+          <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #1e40af' }}>
+            <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>ESAT</div>
+            <div style={{ fontSize:28, fontWeight:700, color:'#1e40af' }}>{stats.esat} miembros</div>
+          </div>
+        )}
       </div>
 
       {/* Lista de personas con horas */}
