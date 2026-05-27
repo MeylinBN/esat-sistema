@@ -9,7 +9,7 @@ const TIPO_CFG: Record<string,{bg:string,txt:string,border:string,label:string}>
   anuncio:      {bg:'#dcfce7',txt:'#15803d',border:'#86efac',label:'ANUNCIO'},
   urgente:      {bg:'#fee2e2',txt:'#b91c1c',border:'#fca5a5',label:'URGENTE'},
   horario:      {bg:'#dbeafe',txt:'#1d4ed8',border:'#93c5fd',label:'HORARIO'},
-  recordatorio: {bg:'#fef3c7',txt:'#b45309',border:'#fde68a',label:'RECORDA.'},
+  recordatorio: {bg:'#fef3c7',txt:'#b45309',border:'#fde68a',label:'RECORDATORIO'},
 }
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -45,11 +45,12 @@ export default function AvisosPage() {
   }
 
   async function eliminar(id:string){
-  if(!confirm('¿Eliminar este aviso?')) return
-  await supabase.from('avisos').delete().eq('id',id)
-  load()
-}
-    // Tabs y Filtros
+    if(!confirm('¿Eliminar este aviso?')) return
+    await supabase.from('avisos').delete().eq('id',id)
+    load()
+  }
+
+  // Tabs y Filtros
   const TABS = ['Todos', 'Anuncios', 'Permisos', 'Horarios', 'Recordatorios', 'Urgentes']
   const filtrados = avisos.filter(a => {
     if (filtro === 'Todos') return true
@@ -71,6 +72,15 @@ export default function AvisosPage() {
       const f=parseISO(a.fecha_evento+'T12:00:00')
       return f.getDate()===dia&&f.getMonth()===mesVer&&f.getFullYear()===anioVer
     })
+  }
+
+  // Etiquetas para agrupación
+  const tipoLabels: Record<string,string> = {
+    urgente: '🔴 URGENTES',
+    anuncio: '📢 ANUNCIOS',
+    permiso: '📋 PERMISOS',
+    horario: '🕐 HORARIOS',
+    recordatorio: '⏰ RECORDATORIOS'
   }
 
   if(loading) return <div style={{padding:40,textAlign:'center',color:'#94a3b8'}}>Cargando avisos...</div>
@@ -99,110 +109,168 @@ export default function AvisosPage() {
             ))}
           </div>
 
+          {/* Lista agrupada o normal */}
           <div style={{display:'flex',flexDirection:'column',gap:10}}>
-            {filtrados.map(a=>{
-              const cfg=TIPO_CFG[a.tipo]??TIPO_CFG.anuncio
-              return (
-                <div key={a.id} style={{background:'white',border:`1px solid ${cfg.border}`,borderLeft:`4px solid ${cfg.txt}`,borderRadius:12,padding:'14px 18px',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
-                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}>
-                    <div style={{flex:1}}>
-                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
-                        <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:cfg.bg,color:cfg.txt}}>{cfg.label}</span>
-                        {a.urgente&&<span style={{fontSize:10,fontWeight:700,color:'#b91c1c'}}>🔴 URGENTE</span>}
+            {filtrados.length === 0 && (
+              <div style={{textAlign:'center',padding:40,color:'#94a3b8',fontSize:13}}>Sin avisos en esta categoría</div>
+            )}
+            
+            {filtro === 'Todos' ? (
+              /* AGRUPADO POR TIPOS */
+              <>
+                {['urgente', 'anuncio', 'permiso', 'horario', 'recordatorio'].map(tipo => {
+                  const avisosTipo = filtrados.filter(a => 
+                    tipo === 'urgente' ? a.urgente : a.tipo === tipo
+                  )
+                  if (avisosTipo.length === 0) return null
+                  
+                  return (
+                    <div key={tipo} style={{marginBottom:24}}>
+                      <div style={{
+                        fontSize:11,
+                        fontWeight:700,
+                        color:'#475569',
+                        textTransform:'uppercase',
+                        letterSpacing:'.08em',
+                        marginBottom:12,
+                        paddingBottom:8,
+                        borderBottom:'2px solid #e2e8f0'
+                      }}>
+                        {tipoLabels[tipo]}
                       </div>
-                      <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{a.titulo}</div>
-                      {a.descripcion&&<div style={{fontSize:12,color:'#475569',lineHeight:1.6,marginBottom:6}}>{a.descripcion}</div>}
-                      <div style={{display:'flex',gap:14,fontSize:10,color:'#94a3b8',flexWrap:'wrap'}}>
-                        {a.fecha_evento&&<span>📅 {format(parseISO(a.fecha_evento+'T12:00:00'),"d 'de' MMM yyyy",{locale:es})}</span>}
-                        <span>🕐 {format(new Date(a.created_at),"d MMM · HH:mm",{locale:es})}</span>
-                        <span>👥 {a.destinatario==='todos'?'Todo el equipo':a.destinatario}</span>
+                      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                        {avisosTipo.map(a=>{
+                          const cfg=TIPO_CFG[a.tipo]??TIPO_CFG.anuncio
+                          return (
+                            <div key={a.id} style={{background:'white',border:`1px solid ${cfg.border}`,borderLeft:`4px solid ${cfg.txt}`,borderRadius:12,padding:'14px 18px',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+                              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}>
+                                <div style={{flex:1}}>
+                                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
+                                    <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:cfg.bg,color:cfg.txt}}>{cfg.label}</span>
+                                    {a.urgente&&<span style={{fontSize:10,fontWeight:700,color:'#b91c1c'}}>🔴 URGENTE</span>}
+                                  </div>
+                                  <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{a.titulo}</div>
+                                  {a.descripcion&&<div style={{fontSize:12,color:'#475569',lineHeight:1.6,marginBottom:6}}>{a.descripcion}</div>}
+                                  <div style={{display:'flex',gap:14,fontSize:10,color:'#94a3b8',flexWrap:'wrap'}}>
+                                    {a.fecha_evento&&<span>📅 {format(parseISO(a.fecha_evento+'T12:00:00'),"d 'de' MMM yyyy",{locale:es})}</span>}
+                                    <span>🕐 {format(new Date(a.created_at),"d MMM · HH:mm",{locale:es})}</span>
+                                    <span>👥 {a.destinatario==='todos'?'Todo el equipo':a.destinatario}</span>
+                                  </div>
+                                </div>
+                                <button onClick={()=>eliminar(a.id)} style={{background:'#fee2e2',border:'none',color:'#b91c1c',borderRadius:7,padding:'4px 8px',cursor:'pointer',fontSize:11,fontWeight:600,flexShrink:0,fontFamily:'inherit'}}>Eliminar</button>
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
-                    <button onClick={()=>eliminar(a.id)} style={{background:'#fee2e2',border:'none',color:'#b91c1c',borderRadius:7,padding:'4px 8px',cursor:'pointer',fontSize:11,fontWeight:600,flexShrink:0,fontFamily:'inherit'}}>Eliminar</button>
+                  )
+                })}
+              </>
+            ) : (
+              /* VISTA FILTRADA NORMAL */
+              filtrados.map(a=>{
+                const cfg=TIPO_CFG[a.tipo]??TIPO_CFG.anuncio
+                return (
+                  <div key={a.id} style={{background:'white',border:`1px solid ${cfg.border}`,borderLeft:`4px solid ${cfg.txt}`,borderRadius:12,padding:'14px 18px',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
+                    <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}>
+                      <div style={{flex:1}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
+                          <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:cfg.bg,color:cfg.txt}}>{cfg.label}</span>
+                          {a.urgente&&<span style={{fontSize:10,fontWeight:700,color:'#b91c1c'}}>🔴 URGENTE</span>}
+                        </div>
+                        <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{a.titulo}</div>
+                        {a.descripcion&&<div style={{fontSize:12,color:'#475569',lineHeight:1.6,marginBottom:6}}>{a.descripcion}</div>}
+                        <div style={{display:'flex',gap:14,fontSize:10,color:'#94a3b8',flexWrap:'wrap'}}>
+                          {a.fecha_evento&&<span>📅 {format(parseISO(a.fecha_evento+'T12:00:00'),"d 'de' MMM yyyy",{locale:es})}</span>}
+                          <span>🕐 {format(new Date(a.created_at),"d MMM · HH:mm",{locale:es})}</span>
+                          <span>👥 {a.destinatario==='todos'?'Todo el equipo':a.destinatario}</span>
+                        </div>
+                      </div>
+                      <button onClick={()=>eliminar(a.id)} style={{background:'#fee2e2',border:'none',color:'#b91c1c',borderRadius:7,padding:'4px 8px',cursor:'pointer',fontSize:11,fontWeight:600,flexShrink:0,fontFamily:'inherit'}}>Eliminar</button>
+                    </div>
                   </div>
-                </div>
-              )
-            })}
-            {!filtrados.length&&<div style={{textAlign:'center',padding:40,color:'#94a3b8',fontSize:13}}>Sin avisos en esta categoría</div>}
+                )
+              })
+            )}
           </div>
         </div>
 
         {/* Calendario */}
-        {/* Calendario */}
-<div className="card" style={{position:'sticky',top:24}}>
-  <div className="card-body">
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
-      <span style={{fontWeight:700,fontSize:13,color:'#002F6C'}}>● Calendario</span>
-      <div style={{display:'flex',alignItems:'center',gap:6}}>
-        <button onClick={()=>{if(mesVer===0){setMesVer(11);setAnioVer(anioVer-1)}else setMesVer(mesVer-1)}} style={{background:'none',border:'none',cursor:'pointer',fontSize:16,color:'#94a3b8'}}>‹</button>
-        <span style={{fontSize:12,fontWeight:600,textTransform:'capitalize'}}>{MESES[mesVer]} {anioVer}</span>
-        <button onClick={()=>{if(mesVer===11){setMesVer(0);setAnioVer(anioVer+1)}else setMesVer(mesVer+1)}} style={{background:'none',border:'none',cursor:'pointer',fontSize:16,color:'#94a3b8'}}>›</button>
-      </div>
-    </div>
-    
-    {/* Leyenda */}
-    <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap'}}>
-      {[['#dbeafe','Horario'],['#f3e8ff','Permiso'],['#fee2e2','Urgente'],['#dcfce7','Anuncio'],['#fef3c7','Recordatorio']].map(([c,l])=>(
-        <div key={l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:'#475569'}}>
-          <div style={{width:10,height:10,borderRadius:2,background:c as string}}/>
-          {l}
-        </div>
-      ))}
-    </div>
-    
-    {/* Días semana */}
-    <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
-      {['L','M','M','J','V','S','D'].map((d,i)=>(
-        <div key={i} style={{textAlign:'center',fontSize:10,fontWeight:600,color:'#94a3b8',padding:'4px 0'}}>{d}</div>
-      ))}
-    </div>
-    
-    {/* Días */}
-    <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
-      {Array.from({length:(primerDia===0?6:primerDia-1)}).map((_,i)=><div key={`e${i}`}/>)}
-      {Array.from({length:diasEnMes}).map((_,i)=>{
-        const dia=i+1
-        const avisosD=avisosDelDia(dia)
-        const esHoy=new Date().getDate()===dia&&new Date().getMonth()===mesVer&&new Date().getFullYear()===anioVer
-        
-        return (
-          <div key={dia} title={avisosD.map(a=>`${a.titulo} (${a.tipo})`).join('\n')}
-            style={{textAlign:'center',padding:'4px 2px',borderRadius:6,fontSize:11,fontWeight:esHoy?700:500,
-              background:esHoy?'#002F6C':'white',
-              color:esHoy?'white':'#374151',
-              cursor:'pointer',minHeight:32,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
-              border:esHoy?'2px solid #002F6C':'1px solid #e2e8f0',
-              position:'relative',overflow:'hidden'}}>
-            <span style={{zIndex:1}}>{dia}</span>
-            
-            {/* Indicadores de eventos */}
-            {avisosD.length > 0 && (
-              <div style={{display:'flex',gap:1,marginTop:2,flexWrap:'wrap',justifyContent:'center',zIndex:1}}>
-                {avisosD.slice(0,3).map((a,idx)=>(
-                  <div key={idx} style={{
-                    width:4,height:4,borderRadius:'50%',
-                    background:TIPO_CFG[a.tipo]?.bg??'#f3e8ff',
-                    border:`1px solid ${TIPO_CFG[a.tipo]?.txt??'#7c3aed'}`
-                  }}/>
-                ))}
-                {avisosD.length > 3 && (
-                  <span style={{fontSize:7,color:'#64748b'}}>+{avisosD.length-3}</span>
-                )}
+        <div className="card" style={{position:'sticky',top:24}}>
+          <div className="card-body">
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+              <span style={{fontWeight:700,fontSize:13,color:'#002F6C'}}>● Calendario</span>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <button onClick={()=>{if(mesVer===0){setMesVer(11);setAnioVer(anioVer-1)}else setMesVer(mesVer-1)}} style={{background:'none',border:'none',cursor:'pointer',fontSize:16,color:'#94a3b8'}}>‹</button>
+                <span style={{fontSize:12,fontWeight:600,textTransform:'capitalize'}}>{MESES[mesVer]} {anioVer}</span>
+                <button onClick={()=>{if(mesVer===11){setMesVer(0);setAnioVer(anioVer+1)}else setMesVer(mesVer+1)}} style={{background:'none',border:'none',cursor:'pointer',fontSize:16,color:'#94a3b8'}}>›</button>
               </div>
-            )}
+            </div>
             
-            {/* Fondo degradado si hay eventos */}
-            {avisosD.length > 0 && !esHoy && (
-              <div style={{position:'absolute',bottom:0,left:0,right:0,height:3,
-                background:`linear-gradient(90deg, ${avisosD.map(a=>TIPO_CFG[a.tipo]?.bg??'#f3e8ff').join(', ')})`
-              }}/>
-            )}
+            {/* Leyenda */}
+            <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap'}}>
+              {[['#dbeafe','Horario'],['#f3e8ff','Permiso'],['#fee2e2','Urgente'],['#dcfce7','Anuncio'],['#fef3c7','Recordatorio']].map(([c,l])=>(
+                <div key={l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:'#475569'}}>
+                  <div style={{width:10,height:10,borderRadius:2,background:c as string}}/>
+                  {l}
+                </div>
+              ))}
+            </div>
+            
+            {/* Días semana */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
+              {['L','M','M','J','V','S','D'].map((d,i)=>(
+                <div key={i} style={{textAlign:'center',fontSize:10,fontWeight:600,color:'#94a3b8',padding:'4px 0'}}>{d}</div>
+              ))}
+            </div>
+            
+            {/* Días */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
+              {Array.from({length:(primerDia===0?6:primerDia-1)}).map((_,i)=><div key={`e${i}`}/>)}
+              {Array.from({length:diasEnMes}).map((_,i)=>{
+                const dia=i+1
+                const avisosD=avisosDelDia(dia)
+                const esHoy=new Date().getDate()===dia&&new Date().getMonth()===mesVer&&new Date().getFullYear()===anioVer
+                
+                return (
+                  <div key={dia} title={avisosD.map(a=>`${a.titulo} (${a.tipo})`).join('\n')}
+                    style={{textAlign:'center',padding:'4px 2px',borderRadius:6,fontSize:11,fontWeight:esHoy?700:500,
+                      background:esHoy?'#002F6C':'white',
+                      color:esHoy?'white':'#374151',
+                      cursor:'pointer',minHeight:32,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+                      border:esHoy?'2px solid #002F6C':'1px solid #e2e8f0',
+                      position:'relative',overflow:'hidden'}}>
+                    <span style={{zIndex:1}}>{dia}</span>
+                    
+                    {/* Indicadores de eventos */}
+                    {avisosD.length > 0 && (
+                      <div style={{display:'flex',gap:1,marginTop:2,flexWrap:'wrap',justifyContent:'center',zIndex:1}}>
+                        {avisosD.slice(0,3).map((a,idx)=>(
+                          <div key={idx} style={{
+                            width:4,height:4,borderRadius:'50%',
+                            background:TIPO_CFG[a.tipo]?.bg??'#f3e8ff',
+                            border:`1px solid ${TIPO_CFG[a.tipo]?.txt??'#7c3aed'}`
+                          }}/>
+                        ))}
+                        {avisosD.length > 3 && (
+                          <span style={{fontSize:7,color:'#64748b'}}>+{avisosD.length-3}</span>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Fondo degradado si hay eventos */}
+                    {avisosD.length > 0 && !esHoy && (
+                      <div style={{position:'absolute',bottom:0,left:0,right:0,height:3,
+                        background:`linear-gradient(90deg, ${avisosD.map(a=>TIPO_CFG[a.tipo]?.bg??'#f3e8ff').join(', ')})`
+                      }}/>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
-        )
-      })}
-    </div>
-  </div>
-</div>
+        </div>
       </div>
 
       {modal&&(

@@ -75,14 +75,14 @@ export default function Sidebar(){
     <div className="sidebar">
       {/* Logo */}
       <div style={{padding:'22px 18px 16px',borderBottom:'1px solid rgba(255,255,255,.1)'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:38,height:38,borderRadius:10,background:'rgba(255,255,255,.12)',border:'1.5px solid rgba(255,255,255,.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>🛡️</div>
-          <div>
-            <div style={{fontFamily:'Lora,serif',fontSize:15,fontWeight:600,color:'#fff',lineHeight:1.2}}>ESAT · CIAD</div>
-            <div style={{fontSize:9,color:'rgba(255,255,255,.5)',letterSpacing:'.1em',textTransform:'uppercase'}}>Sistema de Gestión</div>
-          </div>
-        </div>
-      </div>
+  <div style={{display:'flex',alignItems:'center',gap:10}}>
+    <div style={{width:38,height:38,borderRadius:10,background:'rgba(255,255,255,.12)',border:'1.5px solid rgba(255,255,255,.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>📊</div>
+    <div>
+      <div style={{fontFamily:'Lora,serif',fontSize:14,fontWeight:700,color:'#fff',lineHeight:1.2}}>SIGAAE · ESAT</div>
+      <div style={{fontSize:8,color:'rgba(255,255,255,.6)',marginTop:2}}>Sistema Integral de Gestión</div>
+    </div>
+  </div>
+</div>
       
       {/* Usuario Logueado */}
       {usuario && (

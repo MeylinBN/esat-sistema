@@ -125,7 +125,9 @@ export default function AsistenciaPage() {
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:22,flexWrap:'wrap',gap:12}}>
         <div>
           <h1 style={{fontFamily:'Lora,serif',fontSize:24,color:'#002F6C',fontWeight:600}}>Control de asistencia</h1>
-          <p style={{fontSize:12,color:'#475569',marginTop:3,textTransform:'capitalize'}}>{format(new Date(),"EEEE d 'de' MMMM yyyy",{locale:es})}</p>
+        <p style={{fontSize:12,color:'#475569',marginTop:3,textTransform:'capitalize'}}>
+  {format(new Date(),"EEEE d 'de' MMMM 'del' yyyy",{locale:es})}
+</p>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           <button onClick={()=>setVerLista(!verLista)} style={{padding:'8px 16px',background:'white',border:'1.5px solid #e2e8f0',borderRadius:8,cursor:'pointer',fontWeight:600}}>{verLista?'Ver tarjetas':'Ver lista completa'}</button>

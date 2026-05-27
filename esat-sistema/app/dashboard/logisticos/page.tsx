@@ -131,7 +131,7 @@ export default function DashboardLogisticoPage() {
           <div style={{fontSize:12,color:'rgba(255,255,255,.7)',marginTop:2}}>
             {coordinador?.dni==='70189681' 
               ? 'Grupo de Investigación en Biotecnología Ambiental' 
-              : 'Equipo de Asistencia Técnica · Huaraz, Áncash'}
+              : 'Equipo Técnico y Administrativo - Huaraz, Áncash'}
           </div>
         </div>
       </div>
