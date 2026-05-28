@@ -106,12 +106,16 @@ export default function MiPanelPage() {
     
     const permisoData: any = {
       persona_id: persona.id,
-      tipo: tipoPermiso,
-      fecha_inicio: fechaPermiso,
-      fecha_fin: fechaPermiso,
-      motivo: motivoPermiso,
-      sustento_texto: motivoPermiso,
-      estado: 'pendiente'
+  tipo: tipoPermiso,
+  fecha_inicio: fechaPermiso,
+  fecha_fin: fechaPermiso,
+  motivo: motivoPermiso,
+  sustento_texto: motivoPermiso,
+  estado: 'pendiente',
+  dia_recuperacion: necesitaRecuperar ? diaRecuperacion : null,
+  hora_recuperacion_inicio: necesitaRecuperar ? horaRecuperacionInicio : null,
+  hora_recuperacion_fin: necesitaRecuperar ? horaRecuperacionFin : null,
+  recuperacion_aprobada: false
     }
     
     // Si necesita recuperar, agregar los campos

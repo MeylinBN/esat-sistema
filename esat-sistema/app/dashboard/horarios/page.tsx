@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
 
 const DIAS = ['L','M','X','J','V'] as const
 const DIAS_NM: Record<string,string> = {L:'Lunes',M:'Martes',X:'Miércoles',J:'Jueves',V:'Viernes'}
@@ -52,24 +52,29 @@ export default function HorariosPage(){
   useEffect(()=>{load()},[])
 
   async function load(){
-    const hoy = format(new Date(), 'yyyy-MM-dd')
-    const [p,h,pe,rec] = await Promise.all([
-      supabase.from('personas').select('*').eq('activo',true).order('nombre'),
-      supabase.from('horarios').select('*'),
-      supabase.from('permisos').select('*, personas(nombre,color,rol)').order('created_at',{ascending:false}).limit(20),
-      // Recuperaciones aprobadas para esta semana
-      supabase.from('permisos')
-        .select('*, personas(nombre, color, rol)')
-        .eq('recuperacion_aprobada', true)
-        .gte('dia_recuperacion', hoy)
-        .order('dia_recuperacion', { ascending: true })
-    ])
-    setPersonas(p.data??[])
-    setHorarios(h.data??[])
-    setPermisos(pe.data??[])
-    setRecuperaciones(rec.data??[])
-    setLoading(false)
-  }
+  const hoy = format(new Date(), 'yyyy-MM-dd')
+  const inicioSemana = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
+  const finSemana = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
+  
+  const [p,h,pe,rec] = await Promise.all([
+    supabase.from('personas').select('*').eq('activo',true).order('nombre'),
+    supabase.from('horarios').select('*'),
+    supabase.from('permisos').select('*, personas(nombre,color,rol)').order('created_at',{ascending:false}).limit(20),
+    // Recuperaciones aprobadas de ESTA SEMANA
+    supabase.from('permisos')
+      .select('*, personas(nombre, color, rol)')
+      .eq('recuperacion_aprobada', true)
+      .not('dia_recuperacion', 'is', null)
+      .gte('dia_recuperacion', inicioSemana)
+      .lte('dia_recuperacion', finSemana)
+      .order('dia_recuperacion', { ascending: true })
+  ])
+  setPersonas(p.data??[])
+  setHorarios(h.data??[])
+  setPermisos(pe.data??[])
+  setRecuperaciones(rec.data??[])
+  setLoading(false)
+}
 
   function franjas(pid:string,dia:string){
     return horarios.filter(h=>h.persona_id===pid&&h.dia===dia)
