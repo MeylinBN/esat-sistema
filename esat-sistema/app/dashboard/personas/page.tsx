@@ -15,46 +15,42 @@ const GRUPOS_CONFIG = [
   {rol:'EcoBIOTEM',   label:'🌿 GI EcoBIOTEM',        color:'#166534'},
 ]
 
-// Grupos disponibles para el selector
 const GRUPOS_DISPONIBLES = ['ESAT', 'EcoBIOTEM', 'GAMH', 'PAMEC', 'CIAD']
 
 export default function PersonasPage() {
   const supabase = createClient()
-  const [personas,  setPersonas]  = useState<any[]>([])
-  const [horarios,  setHorarios]  = useState<any[]>([])
-  const [areas,     setAreas]     = useState<string[]>([])
-  const [origenes,  setOrigenes]  = useState<string[]>([])
-  const [loading,   setLoading]   = useState(true)
-  const [buscar,    setBuscar]    = useState('')
-  const [modal,     setModal]     = useState(false)
-  const [editando,  setEditando]  = useState<any>(null)
+  const [personas, setPersonas] = useState<any[]>([])
+  const [horarios, setHorarios] = useState<any[]>([])
+  const [areas, setAreas] = useState<string[]>([])
+  const [origenes, setOrigenes] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
+  const [buscar, setBuscar] = useState('')
+  const [modal, setModal] = useState(false)
+  const [editando, setEditando] = useState<any>(null)
   const [vistaInactivos, setVistaInactivos] = useState(false)
 
-  // Estados del formulario
-  const [mNombre,   setMNombre]   = useState('')
-  const [mDni,      setMDni]      = useState('')
-  const [mRol,      setMRol]      = useState('Practicante')
-  const [mSubrol,   setMSubrol]   = useState('')
-  const [mOrigen,   setMOrigen]   = useState('UNASAM')
-  const [mGrupo,    setMGrupo]    = useState('ESAT')
-  const [mArea,     setMArea]     = useState('Ing. Sistemas')
-  const [mColor,    setMColor]    = useState('#1e40af')
+  const [mNombre, setMNombre] = useState('')
+  const [mDni, setMDni] = useState('')
+  const [mRol, setMRol] = useState('Practicante')
+  const [mSubrol, setMSubrol] = useState('')
+  const [mOrigen, setMOrigen] = useState('UNASAM')
+  const [mGrupo, setMGrupo] = useState('ESAT')
+  const [mArea, setMArea] = useState('Ing. Sistemas')
+  const [mColor, setMColor] = useState('#1e40af')
   
-  // NUEVOS CAMPOS
   const [mCumpleanos, setMCumpleanos] = useState('')
-  const [mCelular,    setMCelular]    = useState('')
-  const [mCorreo,     setMCorreo]     = useState('')
-  const [mDomicilio,  setMDomicilio]  = useState('')
+  const [mCelular, setMCelular] = useState('')
+  const [mCorreo, setMCorreo] = useState('')
+  const [mDomicilio, setMDomicilio] = useState('')
   const [mContactoNombre, setMContactoNombre] = useState('')
   const [mContactoTelefono, setMContactoTelefono] = useState('')
   const [mContactoParentesco, setMContactoParentesco] = useState('')
 
-  // Horarios por día: máximo 2 turnos (mañana y tarde)
   const [mHorariosDia, setMHorariosDia] = useState<Record<string, Array<{entrada:string, salida:string}>>>({
     L: [], M: [], X: [], J: [], V: []
   })
 
-  const [saving,    setSaving]    = useState(false)
+  const [saving, setSaving] = useState(false)
 
   useEffect(()=>{
     load()
@@ -71,41 +67,16 @@ export default function PersonasPage() {
     setLoading(false)
   }
 
- async function loadConfiguraciones(){
-  try {
-    // Cargar áreas desde BD
-    const { data: areasData, error: areasError } = await supabase
-      .from('areas')
-      .select('nombre')
-      .eq('activo', true)
-      .order('nombre')
+  async function loadConfiguraciones(){
+    const {data: areasData} = await supabase.from('areas').select('nombre').eq('activo',true).order('nombre')
+    const {data: origenesData} = await supabase.from('origenes').select('nombre').eq('activo',true).order('nombre')
     
-    if (areasError) {
-      console.error('Error cargando áreas:', areasError)
-    }
+    console.log('📋 Áreas cargadas:', areasData)
+    console.log('🌍 Orígenes cargados:', origenesData)
     
-    // Cargar orígenes desde BD
-    const { data: origenesData, error: origenesError } = await supabase
-      .from('origenes')
-      .select('nombre')
-      .eq('activo', true)
-      .order('nombre')
-    
-    if (origenesError) {
-      console.error('Error cargando orígenes:', origenesError)
-    }
-    
-    // Usar datos de BD o valores por defecto si está vacío
-    setAreas(areasData?.map(a => a.nombre) || ['Ing. Sistemas'])
-    setOrigenes(origenesData?.map(o => o.nombre) || ['UNASAM'])
-    
-  } catch (error) {
-    console.error('Error en loadConfiguraciones:', error)
-    // Valores por defecto en caso de error
-    setAreas(['Ing. Sistemas', 'Ing. Ambiental', 'Comunicaciones', 'Derecho'])
-    setOrigenes(['UNASAM', 'SENATI', 'UCV', 'EXTERNO'])
+    setAreas(areasData?.map(a=>a.nombre) || ['Ing. Sistemas'])
+    setOrigenes(origenesData?.map(o=>o.nombre) || ['UNASAM'])
   }
-}
 
   function horarioResumen(pid:string){
     return DIAS.map(d=>{
@@ -130,23 +101,36 @@ export default function PersonasPage() {
 
   function abrirNuevo(){
     setEditando(null)
-    setMNombre(''); setMDni(''); setMRol('Practicante'); setMSubrol('')
-    setMOrigen(origenes[0]||'UNASAM'); setMGrupo('ESAT'); setMArea(areas[0]||'Ing. Sistemas')
+    setMNombre('')
+    setMDni('')
+    setMRol('Practicante')
+    setMSubrol('')
+    setMOrigen(origenes[0]||'UNASAM')
+    setMGrupo('ESAT')
+    setMArea(areas[0]||'Ing. Sistemas')
     setMColor('#1e40af')
     setMHorariosDia({L: [], M: [], X: [], J: [], V: []})
-    // Reset nuevos campos
-    setMCumpleanos(''); setMCelular(''); setMCorreo(''); setMDomicilio('')
-    setMContactoNombre(''); setMContactoTelefono(''); setMContactoParentesco('')
+    setMCumpleanos('')
+    setMCelular('')
+    setMCorreo('')
+    setMDomicilio('')
+    setMContactoNombre('')
+    setMContactoTelefono('')
+    setMContactoParentesco('')
     setModal(true)
   }
 
   async function abrirEditar(p:any){
     setEditando(p)
-    setMNombre(p.nombre); setMDni(p.dni); setMRol(p.rol); setMSubrol(p.subrol ?? '')
-    setMOrigen(p.origen || origenes[0] || 'UNASAM'); setMGrupo(p.grupo)
-    setMArea(p.area || areas[0] || 'Ing. Sistemas'); setMColor(p.color ?? '#1e40af')
+    setMNombre(p.nombre)
+    setMDni(p.dni)
+    setMRol(p.rol)
+    setMSubrol(p.subrol ?? '')
+    setMOrigen(p.origen || origenes[0] || 'UNASAM')
+    setMGrupo(p.grupo)
+    setMArea(p.area || areas[0] || 'Ing. Sistemas')
+    setMColor(p.color ?? '#1e40af')
     
-    // Cargar nuevos campos
     setMCumpleanos(p.fecha_cumpleanos || '')
     setMCelular(p.celular || '')
     setMCorreo(p.correo_personal || '')
@@ -156,10 +140,15 @@ export default function PersonasPage() {
     setMContactoParentesco(p.contacto_emergencia_parentesco || '')
     
     const hPersona = horarios.filter(h=>h.persona_id===p.id)
-    const horariosPorDia: Record<string, Array<{entrada:string, salida:string}>> = { L: [], M: [], X: [], J: [], V: [] }
+    const horariosPorDia: Record<string, Array<{entrada:string, salida:string}>> = {
+      L: [], M: [], X: [], J: [], V: []
+    }
     hPersona.forEach(h=>{
       if(horariosPorDia[h.dia]) {
-        horariosPorDia[h.dia].push({ entrada: h.hora_entrada.slice(0,5), salida: h.hora_salida.slice(0,5) })
+        horariosPorDia[h.dia].push({
+          entrada: h.hora_entrada.slice(0,5), 
+          salida: h.hora_salida.slice(0,5)
+        })
       }
     })
     setMHorariosDia(horariosPorDia)
@@ -173,7 +162,10 @@ export default function PersonasPage() {
 
   function agregarFranja(dia:string){
     const actuales = mHorariosDia[dia]||[]
-    if(actuales.length >= 2) { alert('Máximo 2 turnos por día'); return }
+    if(actuales.length >= 2) {
+      alert('Máximo 2 turnos por día (mañana y tarde)')
+      return
+    }
     const nuevas = {...mHorariosDia}
     const horaDefault = actuales.length === 0 ? {entrada:'08:00', salida:'13:00'} : {entrada:'15:00', salida:'18:00'}
     nuevas[dia] = [...actuales, horaDefault]
@@ -182,7 +174,10 @@ export default function PersonasPage() {
 
   function actualizarFranja(dia:string, index:number, campo:'entrada'|'salida', valor:string){
     const nuevas = {...mHorariosDia}
-    if(nuevas[dia][index]) { nuevas[dia][index][campo] = valor; setMHorariosDia(nuevas) }
+    if(nuevas[dia][index]) {
+      nuevas[dia][index][campo] = valor
+      setMHorariosDia(nuevas)
+    }
   }
 
   function eliminarFranja(dia:string, index:number){
@@ -199,12 +194,18 @@ export default function PersonasPage() {
     const primeraEntrada = mHorariosDia.L?.[0]?.entrada ?? '08:00'
     
     const data = {
-      nombre: mNombre, dni: mDni, rol: mRol, subrol: mSubrol||null,
-      origen: mOrigen, grupo: mGrupo, hora_ingreso: esEco?null:(primeraEntrada + ':00'),
-      tolerancia: 10, color: mColor, area: mArea||null,
+      nombre: mNombre,
+      dni: mDni,
+      rol: mRol,
+      subrol: mSubrol||null,
+      origen: mOrigen,
+      grupo: mGrupo,
+      hora_ingreso: esEco?null:(primeraEntrada + ':00'),
+      tolerancia: 10,
+      color: mColor,
+      area: mArea||null,
       hs_semanales: esEco?null:parseFloat(calcularHorasSemanales(mHorariosDia)),
       sin_horario: esEco,
-      // NUEVOS CAMPOS
       fecha_cumpleanos: mCumpleanos || null,
       celular: mCelular || null,
       correo_personal: mCorreo || null,
@@ -225,20 +226,35 @@ export default function PersonasPage() {
       }
 
       if(personaId && !esEco){
-        if(editando){ await supabase.from('horarios').delete().eq('persona_id', personaId) }
+        if(editando){
+          await supabase.from('horarios').delete().eq('persona_id', personaId)
+        }
         
         const horariosAInsertar: any[] = []
         DIAS.forEach(dia=>{
           (mHorariosDia[dia]||[]).forEach(franja=>{
-            horariosAInsertar.push({ persona_id: personaId, dia: dia, hora_entrada: franja.entrada + ':00', hora_salida: franja.salida + ':00' })
+            horariosAInsertar.push({
+              persona_id: personaId,
+              dia: dia,
+              hora_entrada: franja.entrada + ':00',
+              hora_salida: franja.salida + ':00'
+            })
           })
         })
         
-        if(horariosAInsertar.length > 0){ await supabase.from('horarios').insert(horariosAInsertar) }
+        if(horariosAInsertar.length > 0){
+          await supabase.from('horarios').insert(horariosAInsertar)
+        }
       }
 
-      setModal(false); setSaving(false); load()
-    } catch(err){ console.error('Error:', err); alert('Error al guardar'); setSaving(false) }
+      setModal(false)
+      setSaving(false)
+      load()
+    } catch(err){
+      console.error('Error:', err)
+      alert('Error al guardar')
+      setSaving(false)
+    }
   }
 
   const personasActivas = personas.filter(p=>p.activo!==false)
@@ -253,7 +269,6 @@ export default function PersonasPage() {
 
   return (
     <div>
-      {/* Header */}
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:22,flexWrap:'wrap',gap:12}}>
         <div>
           <h1 style={{fontFamily:'Lora,serif',fontSize:24,color:'#002F6C',fontWeight:600}}>
@@ -264,10 +279,16 @@ export default function PersonasPage() {
           </p>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <input value={buscar} onChange={e=>setBuscar(e.target.value)} placeholder="Buscar nombre, DNI, rol..." 
-            style={{padding:'8px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontSize:13,fontFamily:'inherit',outline:'none',width:220}} />
-          <button onClick={()=>setVistaInactivos(!vistaInactivos)} 
-            style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:vistaInactivos?'#fef3c7':'white',color:vistaInactivos?'#b45309':'#475569',cursor:'pointer',fontWeight:600,fontSize:13}}>
+          <input 
+            value={buscar} 
+            onChange={e=>setBuscar(e.target.value)} 
+            placeholder="Buscar nombre, DNI, rol..." 
+            style={{padding:'8px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontSize:13,fontFamily:'inherit',outline:'none',width:220}}
+          />
+          <button 
+            onClick={()=>setVistaInactivos(!vistaInactivos)} 
+            style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:vistaInactivos?'#fef3c7':'white',color:vistaInactivos?'#b45309':'#475569',cursor:'pointer',fontWeight:600,fontSize:13}}
+          >
             {vistaInactivos ? '👤 Ver Activos' : '📁 Ver Inactivos'}
           </button>
           {!vistaInactivos && (
@@ -280,11 +301,12 @@ export default function PersonasPage() {
 
       {vistaInactivos && personasInactivas.length > 0 && (
         <div style={{background:'#fef3c7',border:'1.5px solid #fde68a',borderRadius:10,padding:'12px 16px',marginBottom:20}}>
-          <span style={{fontSize:13,color:'#b45309',fontWeight:600}}>ℹ️ Mostrando {personasInactivas.length} persona(s) inactiva(s)</span>
+          <span style={{fontSize:13,color:'#b45309',fontWeight:600}}>
+            ℹ️ Mostrando {personasInactivas.length} persona(s) inactiva(s) - Pueden ser reactivadas
+          </span>
         </div>
       )}
 
-      {/* Lista */}
       {GRUPOS_CONFIG.map(grupo=>{
         const gp = filtradas.filter(p=>p.rol===grupo.rol)
         if(!gp.length) return null
@@ -322,9 +344,13 @@ export default function PersonasPage() {
                       </div>
                     )}
                     <div style={{display:'flex',gap:6,justifyContent:'flex-end'}}>
-                      <button onClick={()=>abrirEditar(p)} style={{padding:'5px 10px',background:'#dbeafe',color:'#1d4ed8',border:'1px solid #93c5fd',borderRadius:7,fontSize:11,cursor:'pointer',fontWeight:600}}>✏ Editar</button>
-                      <button onClick={()=>toggleActivo(p.id, p.activo)} 
-                        style={{padding:'5px 10px',background:p.activo!==false?'#fef3c7':'#dcfce7',color:p.activo!==false?'#b45309':'#15803d',border:'none',borderRadius:7,fontSize:11,cursor:'pointer',fontWeight:600}}>
+                      <button onClick={()=>abrirEditar(p)} style={{padding:'5px 10px',background:'#dbeafe',color:'#1d4ed8',border:'1px solid #93c5fd',borderRadius:7,fontSize:11,cursor:'pointer',fontWeight:600}}>
+                        ✏ Editar
+                      </button>
+                      <button 
+                        onClick={()=>toggleActivo(p.id, p.activo)} 
+                        style={{padding:'5px 10px',background:p.activo!==false?'#fef3c7':'#dcfce7',color:p.activo!==false?'#b45309':'#15803d',border:'none',borderRadius:7,fontSize:11,cursor:'pointer',fontWeight:600}}
+                      >
                         {p.activo!==false?'Desactivar':'Activar'}
                       </button>
                     </div>
@@ -337,30 +363,35 @@ export default function PersonasPage() {
       })}
 
       {!filtradas.length && (
-        <div style={{textAlign:'center',padding:40,color:'#94a3b8'}}>No se encontraron personas {vistaInactivos?'inactivas':''} {buscar?`con "${buscar}"`:''}</div>
+        <div style={{textAlign:'center',padding:40,color:'#94a3b8'}}>
+          No se encontraron personas {vistaInactivos?'inactivas':''} {buscar?`con "${buscar}"`:''}
+        </div>
       )}
 
-      {/* Modal */}
       {modal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20,overflowY:'auto'}}
-          onClick={e=>{if(e.target===e.currentTarget)setModal(false)}}>
+          onClick={e=>{if(e.target===e.currentTarget)setModal(false)}}
+        >
           <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:750,boxShadow:'0 24px 80px rgba(0,0,0,.25)',maxHeight:'95vh',overflowY:'auto'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
               <h3 style={{fontSize:18,fontWeight:700,margin:0}}>{editando?'Editar persona':'Agregar persona'}</h3>
-              <button onClick={()=>setModal(false)} style={{width:32,height:32,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+              <button onClick={()=>setModal(false)} style={{width:32,height:32,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                ×
+              </button>
             </div>
             
-            {/* Datos básicos */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Nombre completo *</label>
                 <input value={mNombre} onChange={e=>setMNombre(e.target.value)} placeholder="Nombres y apellidos"
-                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
+                />
               </div>
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>DNI *</label>
                 <input value={mDni} onChange={e=>setMDni(e.target.value)} placeholder="Nro. de documento"
-                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
+                />
               </div>
             </div>
 
@@ -368,21 +399,28 @@ export default function PersonasPage() {
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Rol</label>
                 <select value={mRol} onChange={e=>setMRol(e.target.value)}
-                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
+                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
+                >
                   {ROLES.map(r=><option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Origen</label>
                 <select value={mOrigen} onChange={e=>setMOrigen(e.target.value)}
-                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
-                  {origenes.map(o=><option key={o} value={o}>{o}</option>)}
+                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
+                >
+                  {origenes.length === 0 ? (
+                    <option value="UNASAM">UNASAM</option>
+                  ) : (
+                    origenes.map(o => <option key={o} value={o}>{o}</option>)
+                  )}
                 </select>
               </div>
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Grupo</label>
                 <select value={mGrupo} onChange={e=>setMGrupo(e.target.value)}
-                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
+                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
+                >
                   {GRUPOS_DISPONIBLES.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
@@ -392,67 +430,77 @@ export default function PersonasPage() {
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Subrol / Especialidad</label>
                 <input value={mSubrol} onChange={e=>setMSubrol(e.target.value)} placeholder="Ej: Ing. Ambiental"
-                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
+                />
               </div>
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Área</label>
                 <select value={mArea} onChange={e=>setMArea(e.target.value)}
-                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
-                  {areas.map(a=><option key={a} value={a}>{a}</option>)}
+                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
+                >
+                  {areas.length === 0 ? (
+                    <option value="Ing. Sistemas">Ing. Sistemas</option>
+                  ) : (
+                    areas.map(a => <option key={a} value={a}>{a}</option>)
+                  )}
                 </select>
               </div>
             </div>
 
-            {/* NUEVA SECCIÓN: Datos de Contacto */}
             <div style={{marginBottom:16,padding:'14px',background:'#f8fafc',borderRadius:10,border:'1px solid #e2e8f0'}}>
               <h4 style={{fontSize:13,fontWeight:700,color:'#0f172a',margin:'0 0 12px 0'}}>📞 Datos de Contacto</h4>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:10}}>
                 <div>
                   <label style={{display:'block',fontSize:10,fontWeight:600,color:'#475569',marginBottom:4}}>Cumpleaños</label>
                   <input type="date" value={mCumpleanos} onChange={e=>setMCumpleanos(e.target.value)}
-                    style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}/>
+                    style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}
+                  />
                 </div>
                 <div>
                   <label style={{display:'block',fontSize:10,fontWeight:600,color:'#475569',marginBottom:4}}>Celular</label>
                   <input type="tel" value={mCelular} onChange={e=>setMCelular(e.target.value)} placeholder="999 888 777"
-                    style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}/>
+                    style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}
+                  />
                 </div>
                 <div>
                   <label style={{display:'block',fontSize:10,fontWeight:600,color:'#475569',marginBottom:4}}>Correo Personal</label>
                   <input type="email" value={mCorreo} onChange={e=>setMCorreo(e.target.value)} placeholder="correo@ejemplo.com"
-                    style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}/>
+                    style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}
+                  />
                 </div>
               </div>
               <div>
                 <label style={{display:'block',fontSize:10,fontWeight:600,color:'#475569',marginBottom:4}}>Domicilio</label>
                 <input value={mDomicilio} onChange={e=>setMDomicilio(e.target.value)} placeholder="Dirección completa"
-                  style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}/>
+                  style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}
+                />
               </div>
             </div>
 
-            {/* NUEVA SECCIÓN: Contacto de Emergencia */}
             <div style={{marginBottom:16,padding:'14px',background:'#fff1f2',borderRadius:10,border:'1px solid #fecdd3'}}>
               <h4 style={{fontSize:13,fontWeight:700,color:'#9f1239',margin:'0 0 12px 0'}}>🚨 Contacto de Emergencia</h4>
               <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:12}}>
                 <div>
                   <label style={{display:'block',fontSize:10,fontWeight:600,color:'#475569',marginBottom:4}}>Nombre</label>
                   <input value={mContactoNombre} onChange={e=>setMContactoNombre(e.target.value)} placeholder="Nombre completo"
-                    style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}/>
+                    style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}
+                  />
                 </div>
                 <div>
                   <label style={{display:'block',fontSize:10,fontWeight:600,color:'#475569',marginBottom:4}}>Teléfono</label>
                   <input value={mContactoTelefono} onChange={e=>setMContactoTelefono(e.target.value)} placeholder="999 888 777"
-                    style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}/>
+                    style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}
+                  />
                 </div>
                 <div>
                   <label style={{display:'block',fontSize:10,fontWeight:600,color:'#475569',marginBottom:4}}>Parentesco</label>
                   <input value={mContactoParentesco} onChange={e=>setMContactoParentesco(e.target.value)} placeholder="Ej: Padre"
-                    style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}/>
+                    style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}
+                  />
                 </div>
               </div>
             </div>
 
-            {/* Horarios */}
             {mRol !== 'EcoBIOTEM' && (
               <div style={{marginBottom:16,padding:'16px',background:'#f8fafc',borderRadius:12,border:'1.5px solid #e2e8f0'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
@@ -465,7 +513,8 @@ export default function PersonasPage() {
                       <span style={{fontSize:12,fontWeight:600,color:'#475569'}}>{DIAS_LABEL[dia]}</span>
                       {(mHorariosDia[dia]||[]).length < 2 && (
                         <button onClick={()=>agregarFranja(dia)} 
-                          style={{padding:'3px 8px',background:'#10b981',color:'white',border:'none',borderRadius:5,fontSize:10,cursor:'pointer',fontWeight:600}}>
+                          style={{padding:'3px 8px',background:'#10b981',color:'white',border:'none',borderRadius:5,fontSize:10,cursor:'pointer',fontWeight:600}}
+                        >
                           + {(mHorariosDia[dia]||[]).length===0?'Turno mañana':'Turno tarde'}
                         </button>
                       )}
@@ -474,31 +523,42 @@ export default function PersonasPage() {
                       <div key={idx} style={{display:'flex',gap:8,alignItems:'center',marginBottom:6}}>
                         <span style={{fontSize:10,color:'#94a3b8',minWidth:60}}>{idx===0?'🌅 Mañana':'🌆 Tarde'}</span>
                         <input type="time" value={franja.entrada} onChange={e=>actualizarFranja(dia,idx,'entrada',e.target.value)}
-                          style={{flex:1,padding:'6px 8px',border:'1px solid #d1d5db',borderRadius:6,fontSize:12}}/>
+                          style={{flex:1,padding:'6px 8px',border:'1px solid #d1d5db',borderRadius:6,fontSize:12}}
+                        />
                         <span style={{color:'#94a3b8'}}>a</span>
                         <input type="time" value={franja.salida} onChange={e=>actualizarFranja(dia,idx,'salida',e.target.value)}
-                          style={{flex:1,padding:'6px 8px',border:'1px solid #d1d5db',borderRadius:6,fontSize:12}}/>
+                          style={{flex:1,padding:'6px 8px',border:'1px solid #d1d5db',borderRadius:6,fontSize:12}}
+                        />
                         <button onClick={()=>eliminarFranja(dia,idx)} 
-                          style={{width:24,height:24,border:'none',background:'#fee2e2',color:'#b91c1c',borderRadius:5,cursor:'pointer',fontSize:12}}>×</button>
+                          style={{width:24,height:24,border:'none',background:'#fee2e2',color:'#b91c1c',borderRadius:5,cursor:'pointer',fontSize:12}}
+                        >
+                          ×
+                        </button>
                       </div>
                     ))}
-                    {(mHorariosDia[dia]||[]).length===0 && <div style={{fontSize:11,color:'#94a3b8',padding:'4px 0'}}>Sin horario registrado</div>}
+                    {(mHorariosDia[dia]||[]).length===0 && (
+                      <div style={{fontSize:11,color:'#94a3b8',padding:'4px 0'}}>Sin horario registrado</div>
+                    )}
                   </div>
                 ))}
                 
                 <div style={{marginTop:12,padding:'10px',background:'#dbeafe',borderRadius:8,textAlign:'center'}}>
-                  <span style={{fontSize:12,color:'#1e40af',fontWeight:600}}>⏱ Total calculado: {calcularHorasSemanales(mHorariosDia)} horas/semana</span>
+                  <span style={{fontSize:12,color:'#1e40af',fontWeight:600}}>
+                    ⏱ Total calculado: {calcularHorasSemanales(mHorariosDia)} horas/semana
+                  </span>
                 </div>
               </div>
             )}
 
             <div style={{display:'flex',gap:8,justifyContent:'flex-end',paddingTop:16,borderTop:'1px solid #e2e8f0'}}>
               <button onClick={()=>setModal(false)} 
-                style={{padding:'10px 20px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:13,fontFamily:'inherit',fontWeight:600}}>
+                style={{padding:'10px 20px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:13,fontFamily:'inherit',fontWeight:600}}
+              >
                 Cancelar
               </button>
               <button onClick={guardar} disabled={saving||!mNombre||!mDni}
-                style={{padding:'10px 24px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mNombre||!mDni||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mNombre||!mDni||saving)?.6:1}}>
+                style={{padding:'10px 24px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mNombre||!mDni||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mNombre||!mDni||saving)?0.6:1}}
+              >
                 {saving?'Guardando...':editando?'Guardar cambios':'Agregar persona'}
               </button>
             </div>
