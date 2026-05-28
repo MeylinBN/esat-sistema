@@ -134,11 +134,36 @@ export default function PermisosPage() {
     setError(null)
   }
 
-  async function cambiarEstado(id:string, estado:string){
-    const { error } = await supabase.from('permisos').update({ estado }).eq('id', id)
-    if(error) { alert('Error al actualizar: ' + error.message) } 
-    else { load() }
+ async function cambiarEstado(id:string, estado:string){
+  // Si es aprobación y tiene recuperación, actualizar recuperacion_aprobada
+  if (estado === 'aprobado') {
+    const { error } = await supabase
+      .from('permisos')
+      .update({ 
+        estado,
+        recuperacion_aprobada: true  // ← IMPORTANTE
+      })
+      .eq('id', id)
+    
+    if(error) {
+      alert('Error al aprobar: ' + error.message)
+    } else {
+      load()
+    }
+  } else {
+    // Para rechazo u otros estados
+    const { error } = await supabase
+      .from('permisos')
+      .update({ estado })
+      .eq('id', id)
+    
+    if(error) {
+      alert('Error al actualizar: ' + error.message)
+    } else {
+      load()
+    }
   }
+}
 
   async function eliminar(id:string){
     if(!confirm('¿Eliminar este permiso?')) return

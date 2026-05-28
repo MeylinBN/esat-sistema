@@ -51,7 +51,7 @@ export default function HorariosPage(){
 
   useEffect(()=>{load()},[])
 
-  async function load(){
+ async function load(){
   const hoy = format(new Date(), 'yyyy-MM-dd')
   const inicioSemana = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
   const finSemana = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
@@ -60,15 +60,19 @@ export default function HorariosPage(){
     supabase.from('personas').select('*').eq('activo',true).order('nombre'),
     supabase.from('horarios').select('*'),
     supabase.from('permisos').select('*, personas(nombre,color,rol)').order('created_at',{ascending:false}).limit(20),
-    // Recuperaciones aprobadas de ESTA SEMANA
+    // Recuperaciones APROBADAS de ESTA SEMANA
     supabase.from('permisos')
       .select('*, personas(nombre, color, rol)')
-      .eq('recuperacion_aprobada', true)
-      .not('dia_recuperacion', 'is', null)
+      .eq('recuperacion_aprobada', true)  // ← Solo aprobadas
+      .not('dia_recuperacion', 'is', null)  // ← Que tengan día
       .gte('dia_recuperacion', inicioSemana)
       .lte('dia_recuperacion', finSemana)
       .order('dia_recuperacion', { ascending: true })
   ])
+  
+  console.log('🔄 Recuperaciones encontradas:', rec.data?.length)
+  console.log('Datos:', rec.data)
+  
   setPersonas(p.data??[])
   setHorarios(h.data??[])
   setPermisos(pe.data??[])
