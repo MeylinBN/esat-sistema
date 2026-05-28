@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 const DIAS = ['L','M','X','J','V'] as const
@@ -24,7 +24,6 @@ function turnoCell(franjas:any[]){
   return {bg:'#f8fafc',border:'#e2e8f0',txt:'—',detail:''}
 }
 
-// Helper: Retorna "Nombre + Primer Apellido"
 function nombreCorto(nombreCompleto: string | null | undefined): string {
   if (!nombreCompleto) return ''
   const partes = nombreCompleto.trim().split(/\s+/)
@@ -36,6 +35,7 @@ export default function HorariosPage(){
   const [personas,   setPersonas]   = useState<any[]>([])
   const [horarios,   setHorarios]   = useState<any[]>([])
   const [permisos,   setPermisos]   = useState<any[]>([])
+  const [recuperaciones, setRecuperaciones] = useState<any[]>([])
   const [loading,    setLoading]    = useState(true)
   const [modalEdit,  setModalEdit]  = useState(false)
   const [editPerId,  setEditPerId]  = useState('')
@@ -52,12 +52,22 @@ export default function HorariosPage(){
   useEffect(()=>{load()},[])
 
   async function load(){
-    const [p,h,pe]=await Promise.all([
+    const hoy = format(new Date(), 'yyyy-MM-dd')
+    const [p,h,pe,rec] = await Promise.all([
       supabase.from('personas').select('*').eq('activo',true).order('nombre'),
       supabase.from('horarios').select('*'),
       supabase.from('permisos').select('*, personas(nombre,color,rol)').order('created_at',{ascending:false}).limit(20),
+      // Recuperaciones aprobadas para esta semana
+      supabase.from('permisos')
+        .select('*, personas(nombre, color, rol)')
+        .eq('recuperacion_aprobada', true)
+        .gte('dia_recuperacion', hoy)
+        .order('dia_recuperacion', { ascending: true })
     ])
-    setPersonas(p.data??[]);setHorarios(h.data??[]);setPermisos(pe.data??[])
+    setPersonas(p.data??[])
+    setHorarios(h.data??[])
+    setPermisos(pe.data??[])
+    setRecuperaciones(rec.data??[])
     setLoading(false)
   }
 
@@ -89,35 +99,28 @@ export default function HorariosPage(){
     setEditFranjas(fr);setEditPerId(persona.id);setModalEdit(true)
   }
 
-  // Agregar franja con validación: máximo 1 mañana y 1 tarde
   function addFranja(dia:string){
     const actuales = editFranjas[dia] || []
     const ultimaFranja = actuales[actuales.length - 1]
     
-    // Determinar si la última es mañana o tarde
     let ultimaEsManana = false
     if(ultimaFranja) {
       ultimaEsManana = parseInt(ultimaFranja.e) < 13
     }
     
-    // Si ya hay 2 franjas, no permitir más
     if(actuales.length >= 2) {
       alert('Máximo 2 franjas por día: 1 mañana + 1 tarde')
       return
     }
     
-    // Si ya hay una mañana, solo permitir tarde
     const yaHayManana = actuales.some(f => parseInt(f.e) < 13)
     const yaHayTarde = actuales.some(f => parseInt(f.e) >= 13)
     
     if(ultimaEsManana && yaHayManana) {
-      // Agregar tarde por defecto
       setEditFranjas(p=>({...p,[dia]:[...p[dia],{e:'15:00',s:'18:00'}]}))
     } else if(!yaHayManana) {
-      // Agregar mañana por defecto
       setEditFranjas(p=>({...p,[dia]:[...p[dia],{e:'08:30',s:'13:00'}]}))
     } else if(!yaHayTarde) {
-      // Agregar tarde
       setEditFranjas(p=>({...p,[dia]:[...p[dia],{e:'15:00',s:'18:00'}]}))
     }
   }
@@ -136,13 +139,10 @@ export default function HorariosPage(){
     setSaving(false);setModalEdit(false);load()
   }
 
-  // Registrar SOLO cambio de horario (no permiso)
   async function guardarCambio(){
     if(!mcPerId) return
     setSaving(true)
     
-    // Insertar en la tabla permisos pero con tipo 'cambio_horario'
-    // O crear una tabla separada 'cambios_horario' si existe
     await supabase.from('permisos').insert({
       persona_id:mcPerId,
       tipo: 'cambio_horario',
@@ -201,6 +201,60 @@ export default function HorariosPage(){
           Los miembros del GI EcoBIOTEM <strong>no tienen horario fijo</strong>. Registran horas desde su panel personal. <strong>{eco.length} miembros activos.</strong>
         </p>
       </div>
+
+      {/* NUEVA SECCIÓN: Recuperaciones Aprobadas */}
+      {recuperaciones.length > 0 && (
+        <div style={{ background: 'white', borderRadius: 14, border: '2px solid #f59e0b', padding: 20, marginBottom: 24, boxShadow: '0 2px 8px rgba(245, 158, 11, 0.15)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🔄</div>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#92400e', margin: 0 }}>Recuperaciones de Horas Aprobadas</h2>
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: '#b45309', background: '#fef3c7', padding: '4px 12px', borderRadius: 20, fontWeight: 600 }}>
+              {recuperaciones.length} esta semana
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
+            {recuperaciones.map(r => (
+              <div key={r.id} style={{ 
+                padding: 14, 
+                background: '#fffbeb', 
+                borderRadius: 10, 
+                border: '1.5px solid #fde68a',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: r.personas?.color || '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: 'white' }}>
+                    {r.personas?.nombre?.charAt(0)}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#78350f' }}>{r.personas?.nombre}</div>
+                    <div style={{ fontSize: 10, color: '#92400e' }}>{r.personas?.rol}</div>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11, color: '#78350f' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>📅</span>
+                    <span>{format(parseISO(r.dia_recuperacion + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: es })}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>🕐</span>
+                    <span>{r.hora_recuperacion_inicio?.slice(0, 5)} - {r.hora_recuperacion_fin?.slice(0, 5)}</span>
+                  </div>
+                </div>
+
+                {r.sustento_texto && (
+                  <div style={{ fontSize: 10, color: '#92400e', fontStyle: 'italic', padding: '6px 10px', background: 'rgba(255,255,255,0.6)', borderRadius: 6, borderLeft: '3px solid #fbbf24' }}>
+                    "{r.sustento_texto}"
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Tabla de horarios por grupo */}
       {GRUPOS_HS.map(g=>{
