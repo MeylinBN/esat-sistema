@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react' 
 import { createClient } from '@/lib/supabase/client'
 
-const [rolesConfig, setRolesConfig] = useState<string[]>([])
+
 
 
 const DIAS = ['L','M','X','J','V']
@@ -30,7 +30,7 @@ export default function PersonasPage() {
   const [modal, setModal] = useState(false)
   const [editando, setEditando] = useState<any>(null)
   const [vistaInactivos, setVistaInactivos] = useState(false)
-
+  const [rolesConfig, setRolesConfig] = useState<string[]>([])
   const [mNombre, setMNombre] = useState('')
   const [mDni, setMDni] = useState('')
   const [mRol, setMRol] = useState('Practicante')
@@ -72,18 +72,13 @@ export default function PersonasPage() {
   async function loadConfiguraciones(){
     const {data: areasData} = await supabase.from('areas').select('nombre').eq('activo',true).order('nombre')
     const {data: origenesData} = await supabase.from('origenes').select('nombre').eq('activo',true).order('nombre')
-    
+     const {data: rolesData} = await supabase.from('config_roles').select('nombre').order('orden', {ascending:true})
     console.log('📋 Áreas cargadas:', areasData)
     console.log('🌍 Orígenes cargados:', origenesData)
     
-    setAreas(areasData?.map(a=>a.nombre) || ['Ing. Sistemas'])
-    setOrigenes(origenesData?.map(o=>o.nombre) || ['UNASAM'])
-const { data: rolesData } = await supabase
-    .from('config_roles')
-    .select('nombre')
-    .order('orden', { ascending: true })
-
-  setRolesConfig(rolesData?.map(r => r.nombre) || [])
+    setAreas(areasData?.map(a=>a.nombre) || [])
+    setOrigenes(origenesData?.map(o=>o.nombre) || [])
+setRolesConfig(rolesData?.map(r=>r.nombre) || ['Practicante'])
 
   }
 
