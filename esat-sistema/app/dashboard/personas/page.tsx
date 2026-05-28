@@ -71,13 +71,41 @@ export default function PersonasPage() {
     setLoading(false)
   }
 
-  async function loadConfiguraciones(){
-    const {data: areasData} = await supabase.from('areas').select('nombre').eq('activo',true).order('nombre')
-    const {data: origenesData} = await supabase.from('origenes').select('nombre').eq('activo',true).order('nombre')
+ async function loadConfiguraciones(){
+  try {
+    // Cargar áreas desde BD
+    const { data: areasData, error: areasError } = await supabase
+      .from('areas')
+      .select('nombre')
+      .eq('activo', true)
+      .order('nombre')
     
-    setAreas(areasData?.map(a=>a.nombre) || ['Ing. Sistemas','Ing. Ambiental','Comunicaciones','Derecho'])
-    setOrigenes(origenesData?.map(o=>o.nombre) || ['UNASAM','SENATI','UCV','EXTERNO'])
+    if (areasError) {
+      console.error('Error cargando áreas:', areasError)
+    }
+    
+    // Cargar orígenes desde BD
+    const { data: origenesData, error: origenesError } = await supabase
+      .from('origenes')
+      .select('nombre')
+      .eq('activo', true)
+      .order('nombre')
+    
+    if (origenesError) {
+      console.error('Error cargando orígenes:', origenesError)
+    }
+    
+    // Usar datos de BD o valores por defecto si está vacío
+    setAreas(areasData?.map(a => a.nombre) || ['Ing. Sistemas'])
+    setOrigenes(origenesData?.map(o => o.nombre) || ['UNASAM'])
+    
+  } catch (error) {
+    console.error('Error en loadConfiguraciones:', error)
+    // Valores por defecto en caso de error
+    setAreas(['Ing. Sistemas', 'Ing. Ambiental', 'Comunicaciones', 'Derecho'])
+    setOrigenes(['UNASAM', 'SENATI', 'UCV', 'EXTERNO'])
   }
+}
 
   function horarioResumen(pid:string){
     return DIAS.map(d=>{
