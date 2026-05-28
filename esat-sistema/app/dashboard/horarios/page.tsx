@@ -52,30 +52,62 @@ export default function HorariosPage(){
   useEffect(()=>{load()},[])
 
   async function load(){
-    const hoy = format(new Date(), 'yyyy-MM-dd')
-    const dosSemanasAdelante = format(addDays(new Date(), 14), 'yyyy-MM-dd')
-    
-    const [p,h,pe,rec] = await Promise.all([
-      supabase.from('personas').select('*').eq('activo',true).order('nombre'),
-      supabase.from('horarios').select('*'),
-      supabase.from('permisos').select('*, personas(nombre,color,rol)').order('created_at',{ascending:false}).limit(20),
-      supabase.from('permisos')
-        .select('*, personas(nombre, color, rol)')
-        .eq('recuperacion_aprobada', true)
-        .not('dia_recuperacion', 'is', null)
-        .gte('dia_recuperacion', hoy)
-        .lte('dia_recuperacion', dosSemanasAdelante)
-        .order('dia_recuperacion', { ascending: true })
-    ])
-    
-    console.log('🔄 Recuperaciones:', rec.data)
-    
-    setPersonas(p.data??[])
-    setHorarios(h.data??[])
-    setPermisos(pe.data??[])
-    setRecuperaciones(rec.data??[])
-    setLoading(false)
+  // 1. Cargar permisos aprobados con recuperación
+  // Simplificamos la consulta para evitar errores de join
+  const { data: recData, error: recError } = await supabase
+    .from('permisos')
+    .select('*') // Traemos solo permisos primero
+    .eq('recuperacion_aprobada', true)
+    .not('dia_recuperacion', 'is', null)
+    .order('dia_recuperacion', { ascending: true })
+
+  console.log(' DEBUG - Permisos crudos:', recData)
+
+  // 2. Filtrar por fecha manualmente en JS (más seguro)
+  const hoy = new Date()
+  hoy.setHours(0,0,0,0)
+  const dosSemanas = new Date()
+  dosSemanas.setDate(hoy.getDate() + 14)
+
+  const recuperacionesFiltradas = (recData || []).filter(r => {
+    const fechaRecup = new Date(r.dia_recuperacion)
+    return fechaRecup >= hoy && fechaRecup <= dosSemanas
+  })
+
+  // 3. Cargar el resto de datos en paralelo
+  const [p, h, pe] = await Promise.all([
+    supabase.from('personas').select('*').eq('activo', true).order('nombre'),
+    supabase.from('horarios').select('*'),
+    supabase.from('permisos').select('*, personas(nombre,color,rol)').order('created_at', { ascending: false }).limit(20)
+  ])
+
+  // 4. Enriquecer recuperaciones con datos de persona manualmente
+// 4. Enriquecer recuperaciones con datos de persona manualmente
+const personasMap: Record<string, any> = {}
+if (p.data) {
+  p.data.forEach(persona => { 
+    if (persona.id) {
+      personasMap[persona.id] = persona 
+    }
+  })
+}
+
+const recuperacionesConNombre = recuperacionesFiltradas.map(r => {
+  const persona = personasMap[r.persona_id]
+  return {
+    ...r,
+    personas: persona || { nombre: 'Desconocido', color: '#94a3b8', rol: '' }
   }
+})
+
+  console.log('✅ Recuperaciones finales:', recuperacionesConNombre)
+
+  setPersonas(p.data ?? [])
+  setHorarios(h.data ?? [])
+  setPermisos(pe.data ?? [])
+  setRecuperaciones(recuperacionesConNombre)
+  setLoading(false)
+}
 
   function franjas(pid:string,dia:string){
     return horarios.filter(h=>h.persona_id===pid&&h.dia===dia)
