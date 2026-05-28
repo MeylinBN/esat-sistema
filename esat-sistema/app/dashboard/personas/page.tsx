@@ -2,7 +2,9 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
-const ROLES = ['Practicante','Tesista','Voluntario','Investigador','Asistente','SENATI','EcoBIOTEM','Coordinador']
+const [rolesConfig, setRolesConfig] = useState<string[]>([])
+
+
 const DIAS = ['L','M','X','J','V']
 const DIAS_LABEL: Record<string,string> = {L:'Lunes',M:'Martes',X:'Miércoles',J:'Jueves',V:'Viernes'}
 
@@ -76,6 +78,13 @@ export default function PersonasPage() {
     
     setAreas(areasData?.map(a=>a.nombre) || ['Ing. Sistemas'])
     setOrigenes(origenesData?.map(o=>o.nombre) || ['UNASAM'])
+const { data: rolesData } = await supabase
+    .from('config_roles')
+    .select('nombre')
+    .order('orden', { ascending: true })
+
+  setRolesConfig(rolesData?.map(r => r.nombre) || [])
+
   }
 
   function horarioResumen(pid:string){
@@ -396,14 +405,14 @@ export default function PersonasPage() {
             </div>
 
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:12}}>
-              <div>
-                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Rol</label>
-                <select value={mRol} onChange={e=>setMRol(e.target.value)}
-                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
-                >
-                  {ROLES.map(r=><option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
+             <div>
+  <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Rol</label>
+  <select value={mRol} onChange={e=>setMRol(e.target.value)}
+    style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
+  >
+    {rolesConfig.map(r => <option key={r} value={r}>{r}</option>)}
+  </select>
+</div>
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Origen</label>
                 <select value={mOrigen} onChange={e=>setMOrigen(e.target.value)}
@@ -463,7 +472,7 @@ export default function PersonasPage() {
                   />
                 </div>
                 <div>
-                  <label style={{display:'block',fontSize:10,fontWeight:600,color:'#475569',marginBottom:4}}>Correo Personal</label>
+                  <label style={{display:'block',fontSize:10,fontWeight:600,color:'#475569',marginBottom:4}}>Correo Personal o Institucional</label>
                   <input type="email" value={mCorreo} onChange={e=>setMCorreo(e.target.value)} placeholder="correo@ejemplo.com"
                     style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}
                   />
