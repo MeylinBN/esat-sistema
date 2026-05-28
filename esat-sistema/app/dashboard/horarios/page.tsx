@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { es } from 'date-fns/locale'
 import { format, startOfWeek, endOfWeek, parseISO, addDays } from 'date-fns'
+import { es } from 'date-fns/locale'
 
 const DIAS = ['L','M','X','J','V'] as const
 const DIAS_NM: Record<string,string> = {L:'Lunes',M:'Martes',X:'Miércoles',J:'Jueves',V:'Viernes'}
@@ -32,55 +32,50 @@ function nombreCorto(nombreCompleto: string | null | undefined): string {
 
 export default function HorariosPage(){
   const supabase = createClient()
-  const [personas,   setPersonas]   = useState<any[]>([])
-  const [horarios,   setHorarios]   = useState<any[]>([])
-  const [permisos,   setPermisos]   = useState<any[]>([])
+  const [personas, setPersonas] = useState<any[]>([])
+  const [horarios, setHorarios] = useState<any[]>([])
+  const [permisos, setPermisos] = useState<any[]>([])
   const [recuperaciones, setRecuperaciones] = useState<any[]>([])
-  const [loading,    setLoading]    = useState(true)
-  const [modalEdit,  setModalEdit]  = useState(false)
-  const [editPerId,  setEditPerId]  = useState('')
+  const [loading, setLoading] = useState(true)
+  const [modalEdit, setModalEdit] = useState(false)
+  const [editPerId, setEditPerId] = useState('')
   const [editFranjas,setEditFranjas]= useState<Record<string,{id?:string,e:string,s:string}[]>>({L:[],M:[],X:[],J:[],V:[]})
-  const [saving,     setSaving]     = useState(false)
-  const [modalCambio,  setModalCambio]  = useState(false)
-  const [mcPerId,    setMcPerId]    = useState('')
-  const [mcFecha,    setMcFecha]    = useState(format(new Date(),'yyyy-MM-dd'))
-  const [mcMotivo,   setMcMotivo]   = useState('')
-  const [mcDia,      setMcDia]      = useState('L')
-  const [mcEntrada,  setMcEntrada]  = useState('08:30')
-  const [mcSalida,   setMcSalida]   = useState('13:00')
+  const [saving, setSaving] = useState(false)
+  const [modalCambio, setModalCambio] = useState(false)
+  const [mcPerId, setMcPerId] = useState('')
+  const [mcFecha, setMcFecha] = useState(format(new Date(),'yyyy-MM-dd'))
+  const [mcMotivo, setMcMotivo] = useState('')
+  const [mcDia, setMcDia] = useState('L')
+  const [mcEntrada, setMcEntrada] = useState('08:30')
+  const [mcSalida, setMcSalida] = useState('13:00')
 
   useEffect(()=>{load()},[])
 
-async function load(){
-  const hoy = format(new Date(), 'yyyy-MM-dd')
-  // Mostrar recuperaciones desde hoy hasta 2 semanas adelante
-  const dosSemanasAdelante = format(addDays(new Date(), 14), 'yyyy-MM-dd')
-  
-  const [p,h,pe,rec] = await Promise.all([
-    supabase.from('personas').select('*').eq('activo',true).order('nombre'),
-    supabase.from('horarios').select('*'),
-    supabase.from('permisos').select('*, personas(nombre,color,rol)').order('created_at',{ascending:false}).limit(20),
-    // Recuperaciones APROBADAS (desde hoy hasta 2 semanas adelante)
-    supabase.from('permisos')
-      .select('*, personas(nombre, color, rol)')
-      .eq('recuperacion_aprobada', true)
-      .not('dia_recuperacion', 'is', null)
-      .gte('dia_recuperacion', hoy)  // Desde hoy
-      .lte('dia_recuperacion', dosSemanasAdelante)  // Hasta 2 semanas después
-      .order('dia_recuperacion', { ascending: true })
-  ])
-  
-  console.log('🔄 Recuperaciones encontradas:', rec.data?.length)
-  if (rec.data && rec.data.length > 0) {
-    console.log('Primera recuperación:', rec.data[0])
+  async function load(){
+    const hoy = format(new Date(), 'yyyy-MM-dd')
+    const dosSemanasAdelante = format(addDays(new Date(), 14), 'yyyy-MM-dd')
+    
+    const [p,h,pe,rec] = await Promise.all([
+      supabase.from('personas').select('*').eq('activo',true).order('nombre'),
+      supabase.from('horarios').select('*'),
+      supabase.from('permisos').select('*, personas(nombre,color,rol)').order('created_at',{ascending:false}).limit(20),
+      supabase.from('permisos')
+        .select('*, personas(nombre, color, rol)')
+        .eq('recuperacion_aprobada', true)
+        .not('dia_recuperacion', 'is', null)
+        .gte('dia_recuperacion', hoy)
+        .lte('dia_recuperacion', dosSemanasAdelante)
+        .order('dia_recuperacion', { ascending: true })
+    ])
+    
+    console.log('🔄 Recuperaciones:', rec.data)
+    
+    setPersonas(p.data??[])
+    setHorarios(h.data??[])
+    setPermisos(pe.data??[])
+    setRecuperaciones(rec.data??[])
+    setLoading(false)
   }
-  
-  setPersonas(p.data??[])
-  setHorarios(h.data??[])
-  setPermisos(pe.data??[])
-  setRecuperaciones(rec.data??[])
-  setLoading(false)
-}
 
   function franjas(pid:string,dia:string){
     return horarios.filter(h=>h.persona_id===pid&&h.dia===dia)
@@ -94,14 +89,6 @@ async function load(){
     },0)
   }
 
-  function resumenHorario(pid:string){
-    return DIAS.map(d=>{
-      const ff=franjas(pid,d)
-      if(!ff.length) return null
-      return `${DIAS_NM[d].slice(0,3)}: ${ff.map(f=>f.hora_entrada.slice(0,5)+'–'+f.hora_salida.slice(0,5)).join(', ')}`
-    }).filter(Boolean).join(' | ')
-  }
-
   function abrirEdicion(persona:any){
     const fr: Record<string,{id?:string,e:string,s:string}[]>={L:[],M:[],X:[],J:[],V:[]}
     horarios.filter(h=>h.persona_id===persona.id).forEach(h=>{
@@ -112,26 +99,14 @@ async function load(){
 
   function addFranja(dia:string){
     const actuales = editFranjas[dia] || []
-    const ultimaFranja = actuales[actuales.length - 1]
-    
-    let ultimaEsManana = false
-    if(ultimaFranja) {
-      ultimaEsManana = parseInt(ultimaFranja.e) < 13
-    }
-    
     if(actuales.length >= 2) {
       alert('Máximo 2 franjas por día: 1 mañana + 1 tarde')
       return
     }
-    
     const yaHayManana = actuales.some(f => parseInt(f.e) < 13)
-    const yaHayTarde = actuales.some(f => parseInt(f.e) >= 13)
-    
-    if(ultimaEsManana && yaHayManana) {
-      setEditFranjas(p=>({...p,[dia]:[...p[dia],{e:'15:00',s:'18:00'}]}))
-    } else if(!yaHayManana) {
+    if(!yaHayManana) {
       setEditFranjas(p=>({...p,[dia]:[...p[dia],{e:'08:30',s:'13:00'}]}))
-    } else if(!yaHayTarde) {
+    } else {
       setEditFranjas(p=>({...p,[dia]:[...p[dia],{e:'15:00',s:'18:00'}]}))
     }
   }
@@ -153,7 +128,6 @@ async function load(){
   async function guardarCambio(){
     if(!mcPerId) return
     setSaving(true)
-    
     await supabase.from('permisos').insert({
       persona_id:mcPerId,
       tipo: 'cambio_horario',
@@ -163,12 +137,11 @@ async function load(){
       estado:'pendiente',
       dias_recuperacion: `${DIAS_NM[mcDia]} ${mcEntrada}-${mcSalida}`
     })
-    
     setSaving(false);setModalCambio(false);setMcMotivo('');load()
   }
 
   const esat=personas.filter(p=>p.grupo==='ESAT')
-  const eco =personas.filter(p=>p.grupo==='EcoBIOTEM')
+  const eco=personas.filter(p=>p.grupo==='EcoBIOTEM')
 
   if(loading) return <div style={{padding:40,textAlign:'center',color:'#94a3b8'}}>Cargando horarios...</div>
 
@@ -213,14 +186,14 @@ async function load(){
         </p>
       </div>
 
-      {/* NUEVA SECCIÓN: Recuperaciones Aprobadas */}
+      {/* SECCIÓN DE RECUPERACIONES APROBADAS */}
       {recuperaciones.length > 0 && (
-        <div style={{ background: 'white', borderRadius: 14, border: '2px solid #f59e0b', padding: 20, marginBottom: 24, boxShadow: '0 2px 8px rgba(245, 158, 11, 0.15)' }}>
+        <div style={{ background: '#fffbeb', borderRadius: 14, border: '2px solid #f59e0b', padding: 20, marginBottom: 24, boxShadow: '0 2px 8px rgba(245, 158, 11, 0.15)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
             <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🔄</div>
             <h2 style={{ fontSize: 16, fontWeight: 700, color: '#92400e', margin: 0 }}>Recuperaciones de Horas Aprobadas</h2>
             <span style={{ marginLeft: 'auto', fontSize: 12, color: '#b45309', background: '#fef3c7', padding: '4px 12px', borderRadius: 20, fontWeight: 600 }}>
-              {recuperaciones.length} esta semana
+              {recuperaciones.length} esta(s) semana(s)
             </span>
           </div>
 
@@ -228,9 +201,9 @@ async function load(){
             {recuperaciones.map(r => (
               <div key={r.id} style={{ 
                 padding: 14, 
-                background: '#fffbeb', 
+                background: 'white', 
                 borderRadius: 10, 
-                border: '1.5px solid #fde68a',
+                border: '1.5px solid #fbbf24',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 8
@@ -248,7 +221,7 @@ async function load(){
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11, color: '#78350f' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span>📅</span>
-                    <span>{format(parseISO(r.dia_recuperacion + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: es })}</span>
+                    <span style={{fontWeight: 600}}>{format(parseISO(r.dia_recuperacion + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: es })}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span>🕐</span>
@@ -257,7 +230,7 @@ async function load(){
                 </div>
 
                 {r.sustento_texto && (
-                  <div style={{ fontSize: 10, color: '#92400e', fontStyle: 'italic', padding: '6px 10px', background: 'rgba(255,255,255,0.6)', borderRadius: 6, borderLeft: '3px solid #fbbf24' }}>
+                  <div style={{ fontSize: 10, color: '#92400e', fontStyle: 'italic', padding: '6px 10px', background: '#fffbeb', borderRadius: 6, borderLeft: '3px solid #fbbf24' }}>
                     "{r.sustento_texto}"
                   </div>
                 )}
