@@ -69,18 +69,19 @@ export default function PersonasPage() {
     setLoading(false)
   }
 
-  async function loadConfiguraciones(){
-    const {data: areasData} = await supabase.from('areas').select('nombre').eq('activo',true).order('nombre')
-    const {data: origenesData} = await supabase.from('origenes').select('nombre').eq('activo',true).order('nombre')
-     const {data: rolesData} = await supabase.from('config_roles').select('nombre').order('orden', {ascending:true})
-    console.log('📋 Áreas cargadas:', areasData)
-    console.log('🌍 Orígenes cargados:', origenesData)
-    
-    setAreas(areasData?.map(a=>a.nombre) || [])
-    setOrigenes(origenesData?.map(o=>o.nombre) || [])
-setRolesConfig(rolesData?.map(r=>r.nombre) || ['Practicante'])
-
-  }
+async function loadConfiguraciones(){
+  const {data: areasData} = await supabase.from('areas').select('nombre').eq('activo',true).order('nombre')
+  const {data: origenesData} = await supabase.from('origenes').select('nombre').eq('activo',true).order('nombre')
+  const {data: rolesData} = await supabase.from('config_roles').select('nombre').order('orden', {ascending:true})
+  
+  console.log('📋 Áreas:', areasData)
+  console.log('🌍 Orígenes:', origenesData)
+  console.log('🎭 Roles:', rolesData)
+  
+  setAreas(areasData?.map(a=>a.nombre) || [])
+  setOrigenes(origenesData?.map(o=>o.nombre) || [])
+  setRolesConfig(rolesData?.map(r=>r.nombre) || [])  // ← Cargar desde config_roles
+}
 
   function horarioResumen(pid:string){
     return DIAS.map(d=>{
@@ -402,11 +403,11 @@ setRolesConfig(rolesData?.map(r=>r.nombre) || ['Practicante'])
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:12}}>
              <div>
   <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Rol</label>
-  <select value={mRol} onChange={e=>setMRol(e.target.value)}
-    style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
-  >
-    {rolesConfig.map(r => <option key={r} value={r}>{r}</option>)}
-  </select>
+<select value={mRol} onChange={e=>setMRol(e.target.value)}
+  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
+>
+  {rolesConfig.map(r => <option key={r} value={r}>{r}</option>)}
+</select>
 </div>
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Origen</label>
