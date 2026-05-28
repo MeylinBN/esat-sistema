@@ -1,13 +1,8 @@
 'use client'
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-
-const [mRecup, setMRecup] = useState('')
-const [mDiaRecup, setMDiaRecup] = useState('')  // NUEVO
-const [mHoraRecupInicio, setMHoraRecupInicio] = useState('')  // NUEVO
-const [mHoraRecupFin, setMHoraRecupFin] = useState('')  // NUEVO
 
 const TIPO_LABEL: Record<string,string> = {
   permiso_medico:'🏥 Médico', 
@@ -40,33 +35,34 @@ export default function PermisosPage() {
   const [mMotivo, setMMotivo] = useState('')
   const [mEstado, setMEstado] = useState('pendiente')
   const [mRecup, setMRecup] = useState('')
+  
+  // NUEVOS: Campos específicos de recuperación
+  const [mDiaRecup, setMDiaRecup] = useState('')
+  const [mHoraRecupInicio, setMHoraRecupInicio] = useState('')
+  const [mHoraRecupFin, setMHoraRecupFin] = useState('')
+  
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string|null>(null)
 
-  useEffect(()=>{
-    load()
-  },[])
+  useEffect(()=>{ load() },[])
 
   async function load(){
     try {
       setError(null)
       
-      // Cargar personas
       const { data: personasData } = await supabase
-  .from('personas')
-  .select('id,nombre,color')
-  .eq('activo', true)
+        .from('personas')
+        .select('id,nombre,color')
+        .eq('activo', true)
         .order('nombre')
       
       setPersonas(personasData ?? [])
 
-      // Cargar permisos
       const { data: permisosData } = await supabase
-  .from('permisos')
-  .select('*')
-  .order('created_at', { ascending: false })
+        .from('permisos')
+        .select('*')
+        .order('created_at', { ascending: false })
       
-      // Unir manualmente con personas
       const permisosConPersonas = (permisosData ?? []).map(perm => {
         const persona = personasData?.find(p => p.id === perm.persona_id)
         return {
@@ -86,118 +82,80 @@ export default function PermisosPage() {
     }
   }
 
- async function guardarPermiso(){
-  // Validaciones estrictas
-  if(!mPerId){
-    setError('Selecciona una persona')
-    return
-  }
-  if(!mFI || !mFF){
-    setError('Selecciona fecha de inicio y fin')
-    return
-  }
-  if(new Date(mFI) > new Date(mFF)){
-    setError('La fecha de inicio no puede ser mayor a la fecha fin')
-    return
-  }
-  if(!mMotivo.trim()){
-    setError('Ingresa un motivo para el permiso')
-    return
-  }
+  async function guardarPermiso(){
+    if(!mPerId){ setError('Selecciona una persona'); return }
+    if(!mFI || !mFF){ setError('Selecciona fecha de inicio y fin'); return }
+    if(new Date(mFI) > new Date(mFF)){ setError('La fecha de inicio no puede ser mayor a la fecha fin'); return }
+    if(!mMotivo.trim()){ setError('Ingresa un motivo para el permiso'); return }
 
-  setSaving(true)
-  setError(null)
-  
-  try {
-    const data = {
-      persona_id: mPerId,
-      tipo: mTipo,
-      fecha_inicio: mFI,
-      fecha_fin: mFF,
-      motivo: mMotivo.trim(),
-      estado: mEstado,
-      dias_recuperacion: mRecup.trim() || null,
-      // NUEVOS CAMPOS DE RECUPERACIÓN
-      dia_recuperacion: mDiaRecup || null,
-      hora_recuperacion_inicio: mHoraRecupInicio || null,
-      hora_recuperacion_fin: mHoraRecupFin || null,
-      recuperacion_aprobada: mDiaRecup ? false : null,  // false para que el coordinador apruebe
-      created_at: new Date().toISOString(),
-    }
-
-    const { error } = await supabase
-      .from('permisos')
-      .insert(data)
+    setSaving(true)
+    setError(null)
     
-    if(error) {
-      console.error('Error insertando:', error)
-      setError('Error al guardar: ' + error.message)
-    } else {
-      console.log('✅ Permiso registrado correctamente')
-      cerrarModal()
-      load()
-    }
-  } catch(err) {
-    setError('Error inesperado al guardar')
-    console.error(err)
-  } finally {
-    setSaving(false)
-  }
-}
+    try {
+      const data = {
+        persona_id: mPerId,
+        tipo: mTipo,
+        fecha_inicio: mFI,
+        fecha_fin: mFF,
+        motivo: mMotivo.trim(),
+        estado: mEstado,
+        dias_recuperacion: mRecup.trim() || null,
+        // Campos específicos de recuperación
+        dia_recuperacion: mDiaRecup || null,
+        hora_recuperacion_inicio: mHoraRecupInicio || null,
+        hora_recuperacion_fin: mHoraRecupFin || null,
+        recuperacion_aprobada: mDiaRecup ? false : null,
+        created_at: new Date().toISOString(),
+      }
 
-function cerrarModal(){
-  setModal(false)
-  setMPerId('')
-  setMFI('')
-  setMFF('')
-  setMMotivo('')
-  setMEstado('pendiente')
-  setMRecup('')
-  setMDiaRecup('')  // NUEVO
-  setMHoraRecupInicio('')  // NUEVO
-  setMHoraRecupFin('')  // NUEVO
-  setError(null)
-}
+      const { error } = await supabase.from('permisos').insert(data)
+      
+      if(error) {
+        console.error('Error insertando:', error)
+        setError('Error al guardar: ' + error.message)
+      } else {
+        console.log('✅ Permiso registrado correctamente')
+        cerrarModal()
+        load()
+      }
+    } catch(err) {
+      setError('Error inesperado al guardar')
+      console.error(err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function cerrarModal(){
+    setModal(false)
+    setMPerId(''); setMFI(''); setMFF(''); setMMotivo('')
+    setMEstado('pendiente'); setMRecup('')
+    setMDiaRecup(''); setMHoraRecupInicio(''); setMHoraRecupFin('')
+    setError(null)
+  }
 
   async function cambiarEstado(id:string, estado:string){
-    const { error } = await supabase
-      .from('permisos')
-      .update({ estado })
-      .eq('id', id)
-    
-    if(error) {
-      alert('Error al actualizar: ' + error.message)
-    } else {
-      load()
-    }
+    const { error } = await supabase.from('permisos').update({ estado }).eq('id', id)
+    if(error) { alert('Error al actualizar: ' + error.message) } 
+    else { load() }
   }
 
   async function eliminar(id:string){
     if(!confirm('¿Eliminar este permiso?')) return
-    const { error } = await supabase
-      .from('permisos')
-      .delete()
-      .eq('id', id)
-    
-    if(error) {
-      alert('Error al eliminar: ' + error.message)
-    } else {
-      load()
-    }
+    const { error } = await supabase.from('permisos').delete().eq('id', id)
+    if(error) { alert('Error al eliminar: ' + error.message) } 
+    else { load() }
   }
 
   const pendientes = permisos.filter(p=>p.estado==='pendiente').length
   const aprobados = permisos.filter(p=>p.estado==='aprobado').length
-  
-  const permisosFiltrados = filtro === 'todos' 
-    ? permisos 
-    : permisos.filter(p=>p.estado===filtro)
+  const permisosFiltrados = filtro === 'todos' ? permisos : permisos.filter(p=>p.estado===filtro)
 
   if(loading) return <div style={{padding:40,textAlign:'center',color:'#94a3b8'}}>Cargando permisos...</div>
 
   return (
     <div>
-      {/* Header con botón Registrar */}
+      {/* Header */}
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:22}}>
         <div>
           <h1 style={{fontFamily:'Lora,serif',fontSize:24,color:'#002F6C',fontWeight:600}}>Permisos y Faltas</h1>
@@ -271,6 +229,13 @@ function cerrarModal(){
                   {p.dias_recuperacion && (
                     <div style={{fontSize:11,color:'#15803d',fontWeight:500}}>🔁 Recuperación: {p.dias_recuperacion}</div>
                   )}
+                  {/* NUEVO: Mostrar día y hora específica de recuperación */}
+                  {p.dia_recuperacion && (
+                    <div style={{fontSize:11,color:'#166534',fontWeight:500,marginTop:2}}>
+                      🗓️ {format(new Date(p.dia_recuperacion+'T12:00:00'), "EEE d MMM", {locale: es})}
+                      {p.hora_recuperacion_inicio && ` de ${p.hora_recuperacion_inicio.slice(0,5)} a ${p.hora_recuperacion_fin?.slice(0,5)}`}
+                    </div>
+                  )}
                 </div>
                 <div style={{display:'flex',gap:6}}>
                   {p.estado==='pendiente' && (
@@ -305,7 +270,7 @@ function cerrarModal(){
       {modal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}
           onClick={e=>{if(e.target===e.currentTarget)setModal(false)}}>
-          <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:500,boxShadow:'0 24px 80px rgba(0,0,0,.25)'}}>
+          <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:520,boxShadow:'0 24px 80px rgba(0,0,0,.25)',maxHeight:'95vh',overflowY:'auto'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
               <h3 style={{fontSize:16,fontWeight:700}}>Registrar permiso / falta</h3>
               <button onClick={cerrarModal} style={{width:28,height:28,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
@@ -355,6 +320,35 @@ function cerrarModal(){
                 style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13,resize:'vertical'}}/>
             </div>
             
+            {/* SECCIÓN DE RECUPERACIÓN */}
+            <div style={{marginBottom:16,padding:'12px',background:'#f8fafc',borderRadius:8,border:'1px solid #e2e8f0'}}>
+              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:8,textTransform:'uppercase'}}>
+                🔄 Recuperación de horas (opcional)
+              </label>
+              
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
+                <div>
+                  <label style={{fontSize:10,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Día</label>
+                  <input type="date" value={mDiaRecup} onChange={e=>setMDiaRecup(e.target.value)}
+                    style={{width:'100%',padding:'6px 8px',border:'1px solid #cbd5e1',borderRadius:6,fontSize:12}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:10,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Hora inicio</label>
+                  <input type="time" value={mHoraRecupInicio} onChange={e=>setMHoraRecupInicio(e.target.value)}
+                    style={{width:'100%',padding:'6px 8px',border:'1px solid #cbd5e1',borderRadius:6,fontSize:12}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:10,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Hora fin</label>
+                  <input type="time" value={mHoraRecupFin} onChange={e=>setMHoraRecupFin(e.target.value)}
+                    style={{width:'100%',padding:'6px 8px',border:'1px solid #cbd5e1',borderRadius:6,fontSize:12}}/>
+                </div>
+              </div>
+              
+              <input value={mRecup} onChange={e=>setMRecup(e.target.value)} 
+                placeholder="Descripción adicional (Ej: recuperar turno de tarde)"
+                style={{width:'100%',padding:'8px 10px',border:'1px solid #e2e8f0',borderRadius:7,fontFamily:'inherit',fontSize:12}}/>
+            </div>
+            
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Estado</label>
@@ -365,39 +359,6 @@ function cerrarModal(){
                   <option value="rechazado">Rechazado</option>
                 </select>
               </div>
-              <div style={{marginBottom:16}}>
-  <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:8,textTransform:'uppercase'}}>
-    📅 Días de recuperación (opcional)
-  </label>
-  
-  <div style={{background:'#f8fafc',padding:'12px',borderRadius:8,border:'1px solid #e2e8f0',marginBottom:10}}>
-    <div style={{fontSize:11,color:'#64748b',marginBottom:8}}>
-      Si la persona va a recuperar horas, especifica cuándo:
-    </div>
-    
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-      <div>
-        <label style={{fontSize:10,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Día</label>
-        <input type="date" value={mDiaRecup} onChange={e=>setMDiaRecup(e.target.value)}
-          style={{width:'100%',padding:'6px 8px',border:'1px solid #cbd5e1',borderRadius:6,fontSize:12}}/>
-      </div>
-      <div>
-        <label style={{fontSize:10,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Hora inicio</label>
-        <input type="time" value={mHoraRecupInicio} onChange={e=>setMHoraRecupInicio(e.target.value)}
-          style={{width:'100%',padding:'6px 8px',border:'1px solid #cbd5e1',borderRadius:6,fontSize:12}}/>
-      </div>
-      <div>
-        <label style={{fontSize:10,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Hora fin</label>
-        <input type="time" value={mHoraRecupFin} onChange={e=>setMHoraRecupFin(e.target.value)}
-          style={{width:'100%',padding:'6px 8px',border:'1px solid #cbd5e1',borderRadius:6,fontSize:12}}/>
-      </div>
-    </div>
-  </div>
-  
-  <input value={mRecup} onChange={e=>setMRecup(e.target.value)} 
-    placeholder="Opcional: Descripción adicional (Ej: martes 28/04)"
-    style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
-</div>
             </div>
             
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
