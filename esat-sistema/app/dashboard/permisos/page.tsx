@@ -202,57 +202,88 @@ export default function PermisosPage() {
       </div>
 
       {/* Lista de permisos */}
+           {/* Lista de permisos */}
       <div style={{display:'flex',flexDirection:'column',gap:10}}>
         {permisosFiltrados.map(p=>{
           const ec = ESTADO_CFG[p.estado]??ESTADO_CFG.pendiente
           return (
-            <div key={p.id} style={{background:'white',borderRadius:12,border:'1.5px solid #e2e8f0',padding:'14px 18px'}}>
+            <div key={p.id} style={{background:'white',borderRadius:12,border:'1.5px solid #e2e8f0',padding:'16px 20px'}}>
               <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}>
                 <div style={{flex:1}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
-                    <div style={{width:26,height:26,borderRadius:'50%',background:p.persona_color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:'white'}}>
+                  {/* Header con nombre y badges */}
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,flexWrap:'wrap'}}>
+                    <div style={{width:28,height:28,borderRadius:'50%',background:p.persona_color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'white'}}>
                       {p.persona_nombre?.charAt(0)}
                     </div>
-                    <span style={{fontSize:13,fontWeight:700}}>{p.persona_nombre}</span>
-                    <span style={{fontSize:11,padding:'2px 9px',borderRadius:20,background:'#dbeafe',color:'#1d4ed8'}}>
+                    <span style={{fontSize:14,fontWeight:700}}>{p.persona_nombre}</span>
+                    <span style={{fontSize:10,padding:'3px 10px',borderRadius:20,background:'#dbeafe',color:'#1d4ed8',fontWeight:600}}>
                       {TIPO_LABEL[p.tipo]??p.tipo}
                     </span>
-                    <span style={{fontSize:11,padding:'2px 9px',borderRadius:20,fontWeight:600,background:ec.bg,color:ec.txt}}>
+                    <span style={{fontSize:10,padding:'3px 10px',borderRadius:20,fontWeight:600,background:ec.bg,color:ec.txt}}>
                       {p.estado}
                     </span>
                   </div>
-                  <div style={{fontSize:12,color:'#475569',marginBottom:4}}>
-                    📅 {format(new Date(p.fecha_inicio+'T12:00:00'),"d MMM yyyy",{locale:es})}
-                    {p.fecha_fin!==p.fecha_inicio && ` → ${format(new Date(p.fecha_fin+'T12:00:00'),"d MMM yyyy",{locale:es})}`}
+
+                  {/* Fechas organizadas */}
+                  <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:10,fontSize:12}}>
+                    {/* Fecha de solicitud */}
+                    <div style={{display:'flex',alignItems:'center',gap:6,color:'#64748b'}}>
+                      <span style={{fontSize:14}}>📅</span>
+                      <span style={{color:'#475569'}}>Solicitado:</span>
+                      <span style={{fontWeight:600,color:'#0f172a'}}>
+                        {format(new Date(p.created_at), "EEEE d 'de' MMMM yyyy", {locale: es})}
+                      </span>
+                    </div>
+
+                    {/* Fecha del permiso */}
+                    <div style={{display:'flex',alignItems:'center',gap:6,color:'#64748b'}}>
+                      <span style={{fontSize:14}}>📅</span>
+                      <span style={{color:'#475569'}}>Día de permiso:</span>
+                      <span style={{fontWeight:600,color:'#dc2626'}}>
+                        {format(new Date(p.fecha_inicio+'T12:00:00'), "EEEE d 'de' MMMM yyyy", {locale: es})}
+                        {p.fecha_fin!==p.fecha_inicio && ` → ${format(new Date(p.fecha_fin+'T12:00:00'), "d 'de' MMMM", {locale: es})}`}
+                      </span>
+                    </div>
+
+                    {/* Fecha de recuperación */}
+                    {p.dia_recuperacion && (
+                      <div style={{display:'flex',alignItems:'center',gap:6,color:'#64748b',padding:'6px 10px',background:'#f0fdf4',borderRadius:6,borderLeft:'3px solid #16a34a'}}>
+                        <span style={{fontSize:14}}>🗓️</span>
+                        <span style={{color:'#475569'}}>Recuperación:</span>
+                        <span style={{fontWeight:600,color:'#166534'}}>
+                          {format(new Date(p.dia_recuperacion+'T12:00:00'), "EEEE d 'de' MMMM", {locale: es})}
+                          {p.hora_recuperacion_inicio && ` de ${p.hora_recuperacion_inicio.slice(0,5)} a ${p.hora_recuperacion_fin?.slice(0,5)}`}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  {p.motivo && <div style={{fontSize:12,color:'#475569',marginBottom:4}}>"{p.motivo}"</div>}
-                  {p.dias_recuperacion && (
-                    <div style={{fontSize:11,color:'#15803d',fontWeight:500}}>🔁 Recuperación: {p.dias_recuperacion}</div>
-                  )}
-                  {/* NUEVO: Mostrar día y hora específica de recuperación */}
-                  {p.dia_recuperacion && (
-                    <div style={{fontSize:11,color:'#166534',fontWeight:500,marginTop:2}}>
-                      🗓️ {format(new Date(p.dia_recuperacion+'T12:00:00'), "EEE d MMM", {locale: es})}
-                      {p.hora_recuperacion_inicio && ` de ${p.hora_recuperacion_inicio.slice(0,5)} a ${p.hora_recuperacion_fin?.slice(0,5)}`}
+
+                  {/* Motivo/Comentario */}
+                  {p.motivo && (
+                    <div style={{padding:'10px 12px',background:'#f8fafc',borderRadius:8,borderLeft:'3px solid #cbd5e1'}}>
+                      <div style={{fontSize:11,fontWeight:600,color:'#64748b',marginBottom:4,textTransform:'uppercase'}}>Comentario:</div>
+                      <div style={{fontSize:12,color:'#475569',fontStyle:'italic',lineHeight:1.5}}>"{p.motivo}"</div>
                     </div>
                   )}
                 </div>
-                <div style={{display:'flex',gap:6}}>
+
+                {/* Botones de acción */}
+                <div style={{display:'flex',flexDirection:'column',gap:6,alignItems:'flex-end'}}>
                   {p.estado==='pendiente' && (
-                    <>
+                    <div style={{display:'flex',gap:6}}>
                       <button onClick={()=>cambiarEstado(p.id,'aprobado')} 
-                        style={{background:'#dcfce7',color:'#15803d',border:'1px solid #86efac',borderRadius:7,padding:'5px 10px',fontSize:11,cursor:'pointer'}}>
+                        style={{background:'#dcfce7',color:'#15803d',border:'1px solid #86efac',borderRadius:7,padding:'6px 12px',fontSize:11,cursor:'pointer',fontWeight:600}}>
                         ✓ Aprobar
                       </button>
                       <button onClick={()=>cambiarEstado(p.id,'rechazado')} 
-                        style={{background:'#fee2e2',color:'#b91c1c',border:'1px solid #fca5a5',borderRadius:7,padding:'5px 10px',fontSize:11,cursor:'pointer'}}>
+                        style={{background:'#fee2e2',color:'#b91c1c',border:'1px solid #fca5a5',borderRadius:7,padding:'6px 12px',fontSize:11,cursor:'pointer',fontWeight:600}}>
                         ✗ Rechazar
                       </button>
-                    </>
+                    </div>
                   )}
                   <button onClick={()=>eliminar(p.id)} 
-                    style={{background:'#fee2e2',color:'#b91c1c',border:'1px solid #fca5a5',borderRadius:7,padding:'5px 10px',fontSize:11,cursor:'pointer'}}>
-                    🗑
+                    style={{background:'#fee2e2',color:'#b91c1c',border:'1px solid #fca5a5',borderRadius:7,padding:'6px 10px',fontSize:11,cursor:'pointer'}}>
+                    🗑 Eliminar
                   </button>
                 </div>
               </div>
