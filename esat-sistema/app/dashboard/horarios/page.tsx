@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { es } from 'date-fns/locale'
-import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
+import { format, startOfWeek, endOfWeek, parseISO, addDays } from 'date-fns'
 
 const DIAS = ['L','M','X','J','V'] as const
 const DIAS_NM: Record<string,string> = {L:'Lunes',M:'Martes',X:'Miércoles',J:'Jueves',V:'Viernes'}
@@ -51,27 +51,29 @@ export default function HorariosPage(){
 
   useEffect(()=>{load()},[])
 
- async function load(){
+async function load(){
   const hoy = format(new Date(), 'yyyy-MM-dd')
-  const inicioSemana = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
-  const finSemana = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
+  // Mostrar recuperaciones desde hoy hasta 2 semanas adelante
+  const dosSemanasAdelante = format(addDays(new Date(), 14), 'yyyy-MM-dd')
   
   const [p,h,pe,rec] = await Promise.all([
     supabase.from('personas').select('*').eq('activo',true).order('nombre'),
     supabase.from('horarios').select('*'),
     supabase.from('permisos').select('*, personas(nombre,color,rol)').order('created_at',{ascending:false}).limit(20),
-    // Recuperaciones APROBADAS de ESTA SEMANA
+    // Recuperaciones APROBADAS (desde hoy hasta 2 semanas adelante)
     supabase.from('permisos')
       .select('*, personas(nombre, color, rol)')
-      .eq('recuperacion_aprobada', true)  // ← Solo aprobadas
-      .not('dia_recuperacion', 'is', null)  // ← Que tengan día
-      .gte('dia_recuperacion', inicioSemana)
-      .lte('dia_recuperacion', finSemana)
+      .eq('recuperacion_aprobada', true)
+      .not('dia_recuperacion', 'is', null)
+      .gte('dia_recuperacion', hoy)  // Desde hoy
+      .lte('dia_recuperacion', dosSemanasAdelante)  // Hasta 2 semanas después
       .order('dia_recuperacion', { ascending: true })
   ])
   
   console.log('🔄 Recuperaciones encontradas:', rec.data?.length)
-  console.log('Datos:', rec.data)
+  if (rec.data && rec.data.length > 0) {
+    console.log('Primera recuperación:', rec.data[0])
+  }
   
   setPersonas(p.data??[])
   setHorarios(h.data??[])
