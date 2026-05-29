@@ -146,17 +146,19 @@ const stats = {
     <div style={{ fontSize:28, fontWeight:700, color:'#15803d' }}>{formatoHoras(stats.totalHoras)}</div>
   </div>
   
-  {/* Mostrar grupos dinámicamente */}
-  {filtroGrupo === 'todos' ? (
-    Object.entries(stats.porGrupo).map(([grupo, count]) => (
-      count > 0 && (
-        <div key={grupo} style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #1e40af' }}>
-          <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>{grupo}</div>
-          <div style={{ fontSize:28, fontWeight:700, color:'#1e40af' }}>{count} miembros</div>
-        </div>
-      )
-    ))
-  ) : (
+ {/* Si es "todos los grupos", mostrar TODAS las tarjetas de grupos */}
+  {filtroGrupo === 'todos' && Object.entries(stats.porGrupo).map(([grupo, count]) => {
+    if (count === 0) return null
+    return (
+      <div key={grupo} style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #1e40af' }}>
+        <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>{grupo}</div>
+        <div style={{ fontSize:28, fontWeight:700, color:'#1e40af' }}>{count} miembros</div>
+      </div>
+    )
+  })}
+  
+  {/* Si NO es "todos", mostrar solo el grupo seleccionado */}
+  {filtroGrupo !== 'todos' && (
     <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #1e40af' }}>
       <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>{filtroGrupo}</div>
       <div style={{ fontSize:28, fontWeight:700, color:'#1e40af' }}>{stats.porGrupo[filtroGrupo] || 0} miembros</div>
