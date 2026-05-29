@@ -15,6 +15,8 @@ export default function DashboardLogisticoPage() {
   const [asistHoy, setAsistHoy] = useState<any[]>([])
   const [permisos, setPermisos] = useState<any[]>([])
   const [tareas, setTareas] = useState<any[]>([])
+  const [horasExtras, setHorasExtras] = useState<any[]>([])
+  const [flexibilidadHoy, setFlexibilidadHoy] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   
   // Estados para Flexibilidad Horaria
@@ -42,7 +44,7 @@ export default function DashboardLogisticoPage() {
     const grupoAsignado = esFrancisco ? 'EcoBIOTEM' : 'ESAT'
     const rolFiltro = esFrancisco ? 'EcoBIOTEM' : ['Practicante','SENATI','Voluntario','Asistente']
 
-    const [p, ah, perm, tar] = await Promise.all([
+    const [p, ah, perm, tar, he, flex] = await Promise.all([
       supabase.from('personas')
         .select('*')
         .eq('activo', true)
@@ -62,6 +64,17 @@ export default function DashboardLogisticoPage() {
         .neq('estado', 'cancelada')
         .order('created_at', {ascending:false})
         .limit(10),
+      // Horas extras pendientes
+      supabase.from('horas_extras')
+        .select('*, personas(nombre,color,rol)')
+        .eq('aprobado', false)
+        .order('created_at', {ascending:false})
+        .limit(5),
+      // Flexibilidad horaria de hoy
+      supabase.from('flexibilidad_horaria')
+        .select('*, personas(nombre)')
+        .eq('fecha', hoy)
+        .order('created_at', {ascending:false}),
     ])
 
     const personasIds = p.data?.map(x=>x.id) || []
@@ -71,6 +84,8 @@ export default function DashboardLogisticoPage() {
     setAsistHoy(asistFiltrada)
     setPermisos(perm.data ?? [])
     setTareas(tar.data ?? [])
+    setHorasExtras(he.data ?? [])
+    setFlexibilidadHoy(flex.data ?? [])
     setLoading(false)
   }
 
@@ -79,6 +94,14 @@ export default function DashboardLogisticoPage() {
       estado: estado,
       recuperacion_aprobada: estado === 'aprobado',
       revisado_por: coordinador?.id
+    }).eq('id', id)
+    load()
+  }
+
+  async function aprobarHoraExtra(id: string, aprobar: boolean) {
+    await supabase.from('horas_extras').update({
+      aprobado: aprobar,
+      aprobado_por: coordinador?.id
     }).eq('id', id)
     load()
   }
@@ -103,12 +126,13 @@ export default function DashboardLogisticoPage() {
     setFlexMinutos('15')
     setFlexMotivo('')
     alert('Flexibilidad registrada correctamente')
+    load()
   }
 
   const presentes = asistHoy.filter(a=>['presente','tarde'].includes(a.estado)).length
   const tardanzas = asistHoy.filter(a=>a.estado==='tarde').length
   const permisosPendientes = permisos.length
-  const tareasActivas = tareas.filter(t=>t.estado==='en_progreso').length
+  const horasExtrasPendientes = horasExtras.length
 
   if(loading) return <div style={{padding:40,textAlign:'center',color:'#94a3b8'}}>Cargando dashboard logístico...</div>
 
@@ -173,7 +197,7 @@ export default function DashboardLogisticoPage() {
           {l:'Personal activo',v:personas.length,s:`${coordinador?.dni==='70189681'?'EcoBIOTEM':'ESAT'}`,i:'👥',c:'#002F6C'},
           {l:'Presentes hoy',v:presentes,s:`de ${personas.length} esperados`,i:'✅',c:'#15803d'},
           {l:'Tardanzas',v:tardanzas,s:'registradas hoy',i:'⏰',c:'#d97706'},
-          {l:'Permisos pendientes',v:permisosPendientes,s:'por aprobar',i:'📋',c:'#dc2626'},
+          {l:'Horas extras pendientes',v:horasExtrasPendientes,s:'por aprobar',i:'⏱',c:'#7c3aed'},
         ].map(m=>(
           <div key={m.l} style={{
             background:'white',borderRadius:12,padding:'16px 18px',
@@ -200,6 +224,7 @@ export default function DashboardLogisticoPage() {
             {personas.map(p=>{
               const a = asistHoy.find(x=>x.persona_id===p.id)
               const estado = a?.estado ?? 'sin_registrar'
+              const tieneFlexibilidad = flexibilidadHoy.some(f => f.persona_id === p.id)
               const COLOR: Record<string,string> = {
                 presente:'#15803d',tarde:'#d97706',ausente:'#dc2626',
                 permiso:'#7c3aed',sin_registrar:'#94a3b8'
@@ -220,6 +245,7 @@ export default function DashboardLogisticoPage() {
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
                       {p.nombre}
+                      {tieneFlexibilidad && <span style={{marginLeft:4,fontSize:10}}>🕐</span>}
                     </div>
                     <div style={{fontSize:10,color:'#94a3b8'}}>
                       {p.rol} · {p.area||p.subrol||'-'}
@@ -313,7 +339,64 @@ export default function DashboardLogisticoPage() {
         </div>
       </div>
 
-      {/* Flexibilidad Horaria - NUEVA SECCIÓN */}
+      {/* Horas Extras Pendientes */}
+      {horasExtras.length > 0 && (
+        <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)', marginBottom: 16}}>
+          <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:14,display:'flex',alignItems:'center',gap:8}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:'#7c3aed'}}/>
+            ⏱ Horas Extras Pendientes
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {horasExtras.map(he => (
+              <div key={he.id} style={{
+                padding:'10px 14px',background:'#f5f3ff',
+                borderRadius:9,border:'1px solid #ddd6fe'
+              }}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                  <div style={{
+                    width:26,height:26,borderRadius:'50%',
+                    background:he.personas?.color||'#94a3b8',
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    fontSize:10,fontWeight:700,color:'white'
+                  }}>
+                    {he.personas?.nombre?.charAt(0)}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:600}}>{he.personas?.nombre}</div>
+                    <div style={{fontSize:10,color:'#94a3b8'}}>{he.personas?.rol}</div>
+                  </div>
+                </div>
+                <div style={{fontSize:11,color:'#475569',marginBottom:4}}>
+                  📅 {he.fecha} · 🕐 {he.hora_inicio?.slice(0,5)} - {he.hora_fin?.slice(0,5)} ({he.horas_solicitadas}h)
+                </div>
+                {he.motivo && (
+                  <div style={{fontSize:11,color:'#64748b',fontStyle:'italic',marginBottom:4}}>
+                    "{he.motivo}"
+                  </div>
+                )}
+                <div style={{display:'flex',gap:6,marginTop:8}}>
+                  <button onClick={()=>aprobarHoraExtra(he.id,true)} style={{
+                    padding:'4px 10px',background:'#dcfce7',color:'#15803d',
+                    border:'1px solid #86efac',borderRadius:6,fontSize:10,
+                    cursor:'pointer',fontWeight:600
+                  }}>
+                    ✓ Aprobar
+                  </button>
+                  <button onClick={()=>aprobarHoraExtra(he.id,false)} style={{
+                    padding:'4px 10px',background:'#fee2e2',color:'#b91c1c',
+                    border:'1px solid #fca5a5',borderRadius:6,fontSize:10,
+                    cursor:'pointer',fontWeight:600
+                  }}>
+                    ✗ Rechazar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Flexibilidad Horaria */}
       <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)', marginBottom: 16}}>
         <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <span style={{display:'flex',alignItems:'center',gap:8}}>
@@ -327,6 +410,19 @@ export default function DashboardLogisticoPage() {
         <p style={{fontSize:12,color:'#64748b',marginBottom:12}}>
           Permite que personas específicas lleguen tarde un día sin que se marque como tardanza.
         </p>
+        {flexibilidadHoy.length > 0 && (
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {flexibilidadHoy.map(f => (
+              <div key={f.id} style={{
+                padding:'8px 12px',background:'#f0f9ff',
+                borderRadius:7,border:'1px solid #bae6fd',
+                fontSize:12,color:'#0369a1'
+              }}>
+                <strong>{f.personas?.nombre}</strong> - {f.minutos_gracia} min de gracia · {f.motivo}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Tareas activas */}
