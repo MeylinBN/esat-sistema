@@ -13,10 +13,17 @@ export default function HorasAcumuladasPage() {
   const [filtroGrupo, setFiltroGrupo] = useState<'todos'|'ESAT'|'EcoBIOTEM'>('todos')
   const [personaSel, setPersonaSel] = useState<string>('')
   const [mesSel, setMesSel] = useState(format(new Date(), 'yyyy-MM'))
+  const [gruposConfig, setGruposConfig] = useState<string[]>([])
 
-  useEffect(() => {
-    load()
-  }, [])
+ useEffect(() => {
+  load()
+  loadGrupos()
+}, [])
+
+async function loadGrupos(){
+  const {data} = await supabase.from('config_grupos').select('nombre').order('orden')
+  setGruposConfig(data?.map(g=>g.nombre) || [])
+}
 
   async function load() {
     try {
@@ -76,14 +83,17 @@ export default function HorasAcumuladasPage() {
   })
 
   // Calcular totales DINÁMICOS según el filtro
-  const stats = {
-    totalPersonas: Object.keys(porPersona).length,
-    totalHoras: Object.values(porPersona).flat().reduce((acc: number, a: any) => 
-      acc + calcularHorasDia(a.hora_entrada?.slice(0,5), a.hora_salida?.slice(0,5)), 0
-    ),
-    ecoBIOTEM: filtroGrupo === 'ESAT' ? 0 : personas.filter(p => p.grupo === 'EcoBIOTEM' && porPersona[p.id]).length,
-    esat: filtroGrupo === 'EcoBIOTEM' ? 0 : personas.filter(p => p.grupo === 'ESAT' && porPersona[p.id]).length
-  }
+const stats = {
+  totalPersonas: Object.keys(porPersona).length,
+  totalHoras: Object.values(porPersona).flat().reduce((acc: number, a: any) => 
+    acc + calcularHorasDia(a.hora_entrada?.slice(0,5), a.hora_salida?.slice(0,5)), 0
+  ),
+  // Calcular dinámicamente por grupo seleccionado
+  porGrupo: gruposConfig.reduce((acc, grupo) => {
+    acc[grupo] = personas.filter(p => p.grupo === grupo && porPersona[p.id]).length
+    return acc
+  }, {} as Record<string, number>)
+}
 
   if (loading) return <div style={{ padding:40, textAlign:'center', color:'#94a3b8' }}>Cargando horas acumuladas...</div>
 
@@ -98,12 +108,13 @@ export default function HorasAcumuladasPage() {
 
       {/* Filtros */}
       <div style={{ display:'flex', gap:12, marginBottom:20, flexWrap:'wrap' }}>
-        <select value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value as any)}
-          style={{ padding:'8px 12px', border:'1.5px solid #e2e8f0', borderRadius:9, fontSize:13, fontFamily:'inherit' }}>
-          <option value="todos">Todos los grupos</option>
-          <option value="ESAT">ESAT</option>
-          <option value="EcoBIOTEM">EcoBIOTEM</option>
-        </select>
+       <select value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value as any)}
+  style={{ padding:'8px 12px', border:'1.5px solid #e2e8f0', borderRadius:9, fontSize:13 }}>
+  <option value="todos">Todos los grupos</option>
+  {gruposConfig.map(g => (
+    <option key={g} value={g}>{g}</option>
+  ))}
+</select>
 
         <select value={mesSel} onChange={e => setMesSel(e.target.value)}
           style={{ padding:'8px 12px', border:'1.5px solid #e2e8f0', borderRadius:9, fontSize:13, fontFamily:'inherit' }}>
@@ -123,33 +134,34 @@ export default function HorasAcumuladasPage() {
         </select>
       </div>
 
-      {/* Stats - Mostramos solo las relevantes según el filtro */}
-      <div style={{ display:'grid', gridTemplateColumns: filtroGrupo === 'todos' ? 'repeat(3,1fr)' : 'repeat(2,1fr)', gap:14, marginBottom:20 }}>
-        <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #e2e8f0' }}>
-          <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>Personas activas</div>
-          <div style={{ fontSize:28, fontWeight:700, color:'#002F6C' }}>{stats.totalPersonas}</div>
+      {/* Stats dinámicos */}
+<div style={{ display:'grid', gridTemplateColumns: filtroGrupo === 'todos' ? 'repeat(3,1fr)' : 'repeat(2,1fr)', gap:14, marginBottom:20 }}>
+  <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #e2e8f0' }}>
+    <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>Personas activas</div>
+    <div style={{ fontSize:28, fontWeight:700, color:'#002F6C' }}>{stats.totalPersonas}</div>
+  </div>
+  <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #e2e8f0' }}>
+    <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>Total horas mes</div>
+    <div style={{ fontSize:28, fontWeight:700, color:'#15803d' }}>{formatoHoras(stats.totalHoras)}</div>
+  </div>
+  
+  {/* Mostrar solo el grupo filtrado o todos si es "todos" */}
+  {filtroGrupo === 'todos' ? (
+    Object.entries(stats.porGrupo).map(([grupo, count]) => (
+      count > 0 && (
+        <div key={grupo} style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #1e40af' }}>
+          <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>{grupo}</div>
+          <div style={{ fontSize:28, fontWeight:700, color:'#1e40af' }}>{count} miembros</div>
         </div>
-        <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #e2e8f0' }}>
-          <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>Total horas mes</div>
-          <div style={{ fontSize:28, fontWeight:700, color:'#15803d' }}>{formatoHoras(stats.totalHoras)}</div>
-        </div>
-        
-        {/* Solo mostrar EcoBIOTEM si no estamos filtrando por ESAT */}
-        {filtroGrupo !== 'ESAT' && (
-          <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #166534' }}>
-            <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>EcoBIOTEM</div>
-            <div style={{ fontSize:28, fontWeight:700, color:'#166534' }}>{stats.ecoBIOTEM} miembros</div>
-          </div>
-        )}
-        
-        {/* Solo mostrar ESAT si no estamos filtrando por EcoBIOTEM */}
-        {filtroGrupo !== 'EcoBIOTEM' && stats.esat > 0 && (
-          <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #1e40af' }}>
-            <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>ESAT</div>
-            <div style={{ fontSize:28, fontWeight:700, color:'#1e40af' }}>{stats.esat} miembros</div>
-          </div>
-        )}
-      </div>
+      )
+    ))
+  ) : (
+    <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #1e40af' }}>
+      <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>{filtroGrupo}</div>
+      <div style={{ fontSize:28, fontWeight:700, color:'#1e40af' }}>{stats.porGrupo[filtroGrupo] || 0} miembros</div>
+    </div>
+  )}
+</div>
 
       {/* Lista de personas con horas */}
       <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
