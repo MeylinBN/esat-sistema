@@ -136,7 +136,13 @@ const stats = {
 
       {/* Stats dinámicos */}
 {/* Stats */}
-<div style={{ display:'grid', gridTemplateColumns: filtroGrupo === 'todos' ? 'repeat(3,1fr)' : 'repeat(2,1fr)', gap:14, marginBottom:20 }}>
+{/* Stats */}
+<div style={{ 
+  display:'grid', 
+  gridTemplateColumns: filtroGrupo === 'todos' ? 'repeat(auto-fit, minmax(200px, 1fr))' : 'repeat(2,1fr)', 
+  gap:14, 
+  marginBottom:20 
+}}>
   <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #e2e8f0' }}>
     <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>Personas activas</div>
     <div style={{ fontSize:28, fontWeight:700, color:'#002F6C' }}>{stats.totalPersonas}</div>
@@ -146,7 +152,7 @@ const stats = {
     <div style={{ fontSize:28, fontWeight:700, color:'#15803d' }}>{formatoHoras(stats.totalHoras)}</div>
   </div>
   
- {/* Si es "todos los grupos", mostrar TODAS las tarjetas de grupos */}
+  {/* Si es "todos los grupos", mostrar TODAS las tarjetas de grupos */}
   {filtroGrupo === 'todos' && Object.entries(stats.porGrupo).map(([grupo, count]) => {
     if (count === 0) return null
     return (
