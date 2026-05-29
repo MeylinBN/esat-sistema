@@ -9,7 +9,7 @@ export default function DashboardLogisticoPage() {
   const hoy = format(new Date(),'yyyy-MM-dd')
   const lunes = format(startOfWeek(new Date(),{weekStartsOn:1}),'yyyy-MM-dd')
   const viernes = format(addDays(startOfWeek(new Date(),{weekStartsOn:1}),4),'yyyy-MM-dd')
-
+  
   const [coordinador, setCoordinador] = useState<any>(null)
   const [personas, setPersonas] = useState<any[]>([])
   const [asistHoy, setAsistHoy] = useState<any[]>([])
@@ -25,6 +25,14 @@ export default function DashboardLogisticoPage() {
   const [flexFecha, setFlexFecha] = useState('')
   const [flexMinutos, setFlexMinutos] = useState('15')
   const [flexMotivo, setFlexMotivo] = useState('')
+
+ const [modalHoraExtra, setModalHoraExtra] = useState(false)
+const [hePersona, setHePersona] = useState('')
+const [heFecha, setHeFecha] = useState('')
+const [heHoraInicio, setHeHoraInicio] = useState('')
+const [heHoraFin, setHeHoraFin] = useState('')
+const [heMotivo, setHeMotivo] = useState('')
+
 
   useEffect(()=>{load()},[])
 
@@ -88,6 +96,39 @@ export default function DashboardLogisticoPage() {
     setFlexibilidadHoy(flex.data ?? [])
     setLoading(false)
   }
+
+async function registrarHoraExtra() {
+  if(!hePersona || !heFecha || !heHoraInicio || !heHoraFin) {
+    alert('Completa todos los campos')
+    return
+  }
+  
+  // Calcular horas
+  const inicio = new Date(`2000-01-01T${heHoraInicio}`)
+  const fin = new Date(`2000-01-01T${heHoraFin}`)
+  const horas = (fin.getTime() - inicio.getTime()) / (1000 * 60 * 60)
+  
+  await supabase.from('horas_extras').insert({
+    persona_id: hePersona,
+    fecha: heFecha,
+    hora_inicio: heHoraInicio + ':00',
+    hora_fin: heHoraFin + ':00',
+    horas_solicitadas: horas,
+    motivo: heMotivo,
+    aprobado: true,  // Se aprueba automáticamente
+    aprobado_por: coordinador?.id
+  })
+  
+  setModalHoraExtra(false)
+  setHePersona('')
+  setHeFecha('')
+  setHeHoraInicio('')
+  setHeHoraFin('')
+  setHeMotivo('')
+  alert('Hora extra registrada correctamente')
+  load()
+}
+
 
   async function aprobarPermiso(id: string, estado: string) {
     await supabase.from('permisos').update({
@@ -197,7 +238,7 @@ const tareasActivas = tareas.filter(t=>t.estado==='en_progreso').length
           {l:'Personal activo',v:personas.length,s:`${coordinador?.dni==='70189681'?'EcoBIOTEM':'ESAT'}`,i:'👥',c:'#002F6C'},
           {l:'Presentes hoy',v:presentes,s:`de ${personas.length} esperados`,i:'✅',c:'#15803d'},
           {l:'Tardanzas',v:tardanzas,s:'registradas hoy',i:'⏰',c:'#d97706'},
-          {l:'Horas extras pendientes',v:horasExtrasPendientes,s:'por aprobar',i:'⏱',c:'#7c3aed'},
+          
         ].map(m=>(
           <div key={m.l} style={{
             background:'white',borderRadius:12,padding:'16px 18px',
@@ -267,6 +308,105 @@ const tareasActivas = tareas.filter(t=>t.estado==='en_progreso').length
             )}
           </div>
         </div>
+
+
+
+{/* Horas Extras Registradas */}
+<div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)', marginBottom: 16}}>
+  <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+    <span style={{display:'flex',alignItems:'center',gap:8}}>
+      <div style={{width:8,height:8,borderRadius:'50%',background:'#7c3aed'}}/>
+      ⏱ Horas Extras Registradas
+    </span>
+    <button onClick={() => setModalHoraExtra(true)} style={{fontSize:11,color:'#002F6C',background:'none',border:'none',cursor:'pointer',fontWeight:500}}>
+      + Registrar hora extra
+    </button>
+  </div>
+  <p style={{fontSize:12,color:'#64748b',marginBottom:12}}>
+    Registra cuando una persona trabaje más allá de su horario normal.
+  </p>
+  
+  {horasExtras.length > 0 && (
+    <div style={{display:'flex',flexDirection:'column',gap:8}}>
+      {horasExtras.map(he => (
+        <div key={he.id} style={{
+          padding:'10px 14px',background:'#f5f3ff',
+          borderRadius:9,border:'1px solid #ddd6fe'
+        }}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+            <div style={{
+              width:26,height:26,borderRadius:'50%',
+              background:he.personas?.color||'#94a3b8',
+              display:'flex',alignItems:'center',justifyContent:'center',
+              fontSize:10,fontWeight:700,color:'white'
+            }}>
+              {he.personas?.nombre?.charAt(0)}
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,fontWeight:600}}>{he.personas?.nombre}</div>
+              <div style={{fontSize:10,color:'#94a3b8'}}>{he.personas?.rol}</div>
+            </div>
+          </div>
+          <div style={{fontSize:11,color:'#475569',marginBottom:4}}>
+            📅 {he.fecha} · 🕐 {he.hora_inicio?.slice(0,5)} - {he.hora_fin?.slice(0,5)} ({he.horas_solicitadas}h)
+          </div>
+          {he.motivo && (
+            <div style={{fontSize:11,color:'#64748b',fontStyle:'italic'}}>
+              "{he.motivo}"
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
+{/* Modal Registrar Hora Extra */}
+{modalHoraExtra && (
+  <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999}} onClick={()=>setModalHoraExtra(false)}>
+    <div style={{background:'white',padding:24,borderRadius:12,width:400,maxWidth:'90%'}} onClick={e=>e.stopPropagation()}>
+      <h3 style={{marginBottom:16,fontSize:16,fontWeight:600}}>Registrar Hora Extra</h3>
+      
+      <div style={{marginBottom:12}}>
+        <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Persona</label>
+        <select value={hePersona} onChange={e=>setHePersona(e.target.value)} style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}}>
+          <option value="">Seleccionar...</option>
+          {personas.map(p => (
+            <option key={p.id} value={p.id}>{p.nombre}</option>
+          ))}
+        </select>
+      </div>
+      
+      <div style={{marginBottom:12}}>
+        <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Fecha</label>
+        <input type="date" value={heFecha} onChange={e=>setHeFecha(e.target.value)} style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}} />
+      </div>
+      
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+        <div>
+          <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Hora Inicio</label>
+          <input type="time" value={heHoraInicio} onChange={e=>setHeHoraInicio(e.target.value)} style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}} />
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Hora Fin</label>
+          <input type="time" value={heHoraFin} onChange={e=>setHeHoraFin(e.target.value)} style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}} />
+        </div>
+      </div>
+      
+      <div style={{marginBottom:16}}>
+        <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Motivo</label>
+        <textarea value={heMotivo} onChange={e=>setHeMotivo(e.target.value)} rows={3} placeholder="Ej: Entrega de proyecto urgente" style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}} />
+      </div>
+      
+      <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+        <button onClick={()=>setModalHoraExtra(false)} style={{padding:'8px 16px',borderRadius:6,border:'1px solid #e2e8f0',background:'white',cursor:'pointer'}}>Cancelar</button>
+        <button onClick={registrarHoraExtra} style={{padding:'8px 16px',borderRadius:6,border:'none',background:'#002F6C',color:'white',cursor:'pointer'}}>Guardar</button>
+      </div>
+    </div>
+  </div>
+)}
+
+
 
         {/* Permisos pendientes */}
         <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
