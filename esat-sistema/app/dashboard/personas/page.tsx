@@ -77,7 +77,7 @@ async function loadConfiguraciones(){
   console.log('📋 Áreas:', areasData)
   console.log('🌍 Orígenes:', origenesData)
   console.log('🎭 Roles:', rolesData)
-  
+  console.log('👥 Grupos:', gruposData)
   setAreas(areasData?.map(a=>a.nombre) || [])
   setOrigenes(origenesData?.map(o=>o.nombre) || [])
   setRolesConfig(rolesData?.map(r=>r.nombre) || [])

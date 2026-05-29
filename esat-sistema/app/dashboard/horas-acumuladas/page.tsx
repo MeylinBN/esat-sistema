@@ -21,7 +21,8 @@ export default function HorasAcumuladasPage() {
 }, [])
 
 async function loadGrupos(){
-  const {data} = await supabase.from('config_grupos').select('nombre').order('orden')
+  const {data} = await supabase.from('config_grupos').select('nombre').order('orden', {ascending:true})
+  console.log('👥 Grupos cargados:', data)
   setGruposConfig(data?.map(g=>g.nombre) || [])
 }
 
@@ -88,7 +89,6 @@ const stats = {
   totalHoras: Object.values(porPersona).flat().reduce((acc: number, a: any) => 
     acc + calcularHorasDia(a.hora_entrada?.slice(0,5), a.hora_salida?.slice(0,5)), 0
   ),
-  // Calcular dinámicamente por grupo seleccionado
   porGrupo: gruposConfig.reduce((acc, grupo) => {
     acc[grupo] = personas.filter(p => p.grupo === grupo && porPersona[p.id]).length
     return acc
@@ -108,8 +108,8 @@ const stats = {
 
       {/* Filtros */}
       <div style={{ display:'flex', gap:12, marginBottom:20, flexWrap:'wrap' }}>
-       <select value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value as any)}
-  style={{ padding:'8px 12px', border:'1.5px solid #e2e8f0', borderRadius:9, fontSize:13 }}>
+     <select value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value as any)}
+  style={{ padding:'8px 12px', border:'1.5px solid #e2e8f0', borderRadius:9, fontSize:13, fontFamily:'inherit' }}>
   <option value="todos">Todos los grupos</option>
   {gruposConfig.map(g => (
     <option key={g} value={g}>{g}</option>
@@ -135,6 +135,7 @@ const stats = {
       </div>
 
       {/* Stats dinámicos */}
+{/* Stats */}
 <div style={{ display:'grid', gridTemplateColumns: filtroGrupo === 'todos' ? 'repeat(3,1fr)' : 'repeat(2,1fr)', gap:14, marginBottom:20 }}>
   <div style={{ background:'white', borderRadius:12, padding:'16px', border:'1.5px solid #e2e8f0' }}>
     <div style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase' }}>Personas activas</div>
@@ -145,7 +146,7 @@ const stats = {
     <div style={{ fontSize:28, fontWeight:700, color:'#15803d' }}>{formatoHoras(stats.totalHoras)}</div>
   </div>
   
-  {/* Mostrar solo el grupo filtrado o todos si es "todos" */}
+  {/* Mostrar grupos dinámicamente */}
   {filtroGrupo === 'todos' ? (
     Object.entries(stats.porGrupo).map(([grupo, count]) => (
       count > 0 && (
