@@ -133,7 +133,7 @@ export default function DashboardLogisticoPage() {
   const tardanzas = asistHoy.filter(a=>a.estado==='tarde').length
   const permisosPendientes = permisos.length
   const horasExtrasPendientes = horasExtras.length
-
+const tareasActivas = tareas.filter(t=>t.estado==='en_progreso').length
   if(loading) return <div style={{padding:40,textAlign:'center',color:'#94a3b8'}}>Cargando dashboard logístico...</div>
 
   return (
