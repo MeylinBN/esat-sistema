@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 export default function MiPanelPage() {
@@ -15,6 +15,9 @@ export default function MiPanelPage() {
   const [tareas, setTareas] = useState<any[]>([])
   const [avances, setAvances] = useState<any[]>([])
   const [asistMes, setAsistMes] = useState<any[]>([])
+  const [flexibilidadHoy, setFlexibilidadHoy] = useState<any>(null)
+  const [tiempoExtraHoy, setTiempoExtraHoy] = useState<any>(null)
+  const [recuperacionHoy, setRecuperacionHoy] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [registrando, setRegistrando] = useState(false)
   const [modalAv, setModalAv] = useState(false)
@@ -30,11 +33,15 @@ export default function MiPanelPage() {
   const [enviandoPermiso, setEnviandoPermiso] = useState(false)
   const [permisoOk, setPermisoOk] = useState(false)
   
-  // Estados para recuperación (NUEVOS)
+  // Estados para recuperación
   const [necesitaRecuperar, setNecesitaRecuperar] = useState(false)
   const [diaRecuperacion, setDiaRecuperacion] = useState('')
   const [horaRecuperacionInicio, setHoraRecuperacionInicio] = useState('')
   const [horaRecuperacionFin, setHoraRecuperacionFin] = useState('')
+
+  // Estados para alertas
+  const [alertaEntrada, setAlertaEntrada] = useState('')
+  const [alertaSalida, setAlertaSalida] = useState('')
 
   // Reloj en tiempo real
   useEffect(()=>{
@@ -57,43 +64,138 @@ export default function MiPanelPage() {
     const mesIni = hoy.slice(0,7)+'-01'
     const mesFin = new Date(new Date().getFullYear(),new Date().getMonth()+1,0).toISOString().slice(0,10)
 
-    const [h,a,t,av,am] = await Promise.all([
+    const [h,a,t,av,am,flex,te,perm] = await Promise.all([
       supabase.from('horarios').select('*').eq('persona_id',p.id),
       supabase.from('asistencias').select('*').eq('persona_id',p.id).eq('fecha',hoy).maybeSingle(),
-      supabase.from('tareas').select('*').eq('persona_id',p.id).neq('estado','cancelada').order('created_at',{ascending:false}),
+      supabase.from('tareas').select('*').eq('persona_id',p.id).neq('estado','cancelada').neq('estado','completada').order('created_at',{ascending:false}),
       supabase.from('avances_semanales').select('*').order('semana',{ascending:false}),
       supabase.from('asistencias').select('*').eq('persona_id',p.id).gte('fecha',mesIni).lte('fecha',mesFin),
+      supabase.from('flexibilidad_horaria').select('*, personas(nombre)').eq('persona_id',p.id).eq('fecha',hoy).maybeSingle(),
+      supabase.from('horas_extras').select('*').eq('persona_id',p.id).eq('fecha',hoy).eq('aprobado',true).maybeSingle(),
+      supabase.from('permisos').select('*').eq('persona_id',p.id).eq('dia_recuperacion',hoy).eq('recuperacion_aprobada',true).maybeSingle(),
     ])
     setHorarios(h.data??[])
     setAsistHoy(a.data??null)
     setTareas(t.data??[])
     setAvances(av.data??[])
     setAsistMes(am.data??[])
+    setFlexibilidadHoy(flex.data??null)
+    setTiempoExtraHoy(te.data??null)
+    setRecuperacionHoy(perm.data??null)
     setLoading(false)
+  }
+
+  function getHorarioHoy(){
+    const diaSemana = format(new Date(),'E').toLowerCase().slice(0,1)
+    const mapeoDias: Record<string,string> = {m:'L',t:'M',w:'X',t:'J',f:'V',s:'S',s:'D'}
+    const diaKey = mapeoDias[diaSemana] || 'L'
+    return horarios.filter(h=>h.dia===diaKey)
+  }
+
+  function getHoraEntradaEsperada(){
+    const franjas = getHorarioHoy()
+    if(franjas.length===0) return persona.hora_ingreso || '08:30'
+    return franjas[0].hora_entrada.slice(0,5)
+  }
+
+  function getHoraSalidaEsperada(){
+    const franjas = getHorarioHoy()
+    if(franjas.length===0) return null
+    // Si tiene tiempo extra, usar la hora fin del tiempo extra
+    if(tiempoExtraHoy) return tiempoExtraHoy.hora_fin.slice(0,5)
+    return franjas[franjas.length-1].hora_salida.slice(0,5)
   }
 
   async function marcarEntrada(){
     if(!persona||registrando) return
     setRegistrando(true)
-    const hora = format(new Date(),'HH:mm:ss')
     
-    const [he,me]=(persona.hora_ingreso?.slice(0,5)??'08:30').split(':').map(Number)
-    const [hr,mr]=tiempo.split(':').map(Number)
-    const tard=Math.max(0,(hr*60+mr)-(he*60+me)-(persona.tolerancia??10))
+    const horaActual = tiempo
+    const [hActual, mActual] = horaActual.split(':').map(Number)
+    const minutosActuales = hActual * 60 + mActual
+    
+    const horaEsperada = getHoraEntradaEsperada()
+    const [hEsp, mEsp] = horaEsperada.split(':').map(Number)
+    const minutosEsperados = hEsp * 60 + mEsp
+    
+    // Calcular minutos de gracia si hay flexibilidad
+    const minutosGracia = flexibilidadHoy?.minutos_gracia || 0
+    const tolerancia = persona.tolerancia || 10
+    const margenTotal = minutosGracia + tolerancia
+    
+    // ✅ VALIDACIÓN: No permitir entrada antes del horario
+    if(minutosActuales < minutosEsperados) {
+      const minutosAntes = minutosEsperados - minutosActuales
+      setAlertaEntrada(`️ No puedes registrar entrada ${minutosAntes} minutos antes de tu horario (${horaEsperada}). Espera a tu hora de entrada.`)
+      setTimeout(()=>setAlertaEntrada(''), 5000)
+      setRegistrando(false)
+      return
+    }
+    
+    // Calcular tardanza
+    const tardanzaMinutos = Math.max(0, minutosActuales - minutosEsperados - margenTotal)
+    const estado = tardanzaMinutos > 0 ? 'tarde' : 'presente'
+    
+    const horaCompleta = horaActual+':00'
     
     await supabase.from('asistencias').upsert(
-      {persona_id:persona.id,fecha:hoy,hora_entrada:hora,estado:tard>0?'tarde':'presente',tardanza_min:tard},
+      {
+        persona_id:persona.id,
+        fecha:hoy,
+        hora_entrada:horaCompleta,
+        estado:estado,
+        tardanza_min:tardanzaMinutos
+      },
       {onConflict:'persona_id,fecha'}
     )
-    setRegistrando(false);load()
+    
+    setAlertaEntrada('')
+    setRegistrando(false)
+    load()
   }
 
   async function marcarSalida(){
     if(!persona||!asistHoy||registrando) return
     setRegistrando(true)
-    const hora = format(new Date(),'HH:mm:ss')
-    await supabase.from('asistencias').update({hora_salida:hora}).eq('id',asistHoy.id)
-    setRegistrando(false);load()
+    
+    const horaActual = tiempo
+    const [hActual, mActual] = horaActual.split(':').map(Number)
+    const minutosActuales = hActual * 60 + mActual
+    
+    const horaSalidaEsperada = getHoraSalidaEsperada()
+    if(!horaSalidaEsperada) {
+      alert('No tienes horario de salida registrado para hoy')
+      setRegistrando(false)
+      return
+    }
+    
+    const [hSalida, mSalida] = horaSalidaEsperada.split(':').map(Number)
+    const minutosSalidaEsperados = hSalida * 60 + mSalida
+    
+    // Calcular horas trabajadas hoy
+    const [hEntrada, mEntrada] = (asistHoy.hora_entrada||'00:00').split(':').map(Number)
+    const minutosEntrada = hEntrada * 60 + mEntrada
+    const horasTrabajadasHoy = (minutosActuales - minutosEntrada) / 60
+    
+    // Calcular diferencia con la salida esperada
+    const diferenciaMinutos = minutosSalidaEsperados - minutosActuales
+    
+    // ✅ Si sale más de 5 minutos antes, mostrar alerta
+    if(diferenciaMinutos > 5) {
+      const horasAntes = Math.floor(diferenciaMinutos / 60)
+      const minsAntes = diferenciaMinutos % 60
+      const mensaje = `⚠️ Estás registrando tu salida ${horasAntes}h ${minsAntes}min antes de tu horario (${horaSalidaEsperada}).\n\nTu total de horas acumuladas hoy sería: ${horasTrabajadasHoy.toFixed(2)}h\n\n¿Deseas continuar?`
+      if(!confirm(mensaje)) {
+        setRegistrando(false)
+        return
+      }
+    }
+    
+    const horaCompleta = horaActual+':00'
+    await supabase.from('asistencias').update({hora_salida:horaCompleta}).eq('id',asistHoy.id)
+    
+    setRegistrando(false)
+    load()
   }
 
   async function enviarPermiso(){
@@ -106,19 +208,18 @@ export default function MiPanelPage() {
     
     const permisoData: any = {
       persona_id: persona.id,
-  tipo: tipoPermiso,
-  fecha_inicio: fechaPermiso,
-  fecha_fin: fechaPermiso,
-  motivo: motivoPermiso,
-  sustento_texto: motivoPermiso,
-  estado: 'pendiente',
-  dia_recuperacion: necesitaRecuperar ? diaRecuperacion : null,
-  hora_recuperacion_inicio: necesitaRecuperar ? horaRecuperacionInicio : null,
-  hora_recuperacion_fin: necesitaRecuperar ? horaRecuperacionFin : null,
-  recuperacion_aprobada: false
+      tipo: tipoPermiso,
+      fecha_inicio: fechaPermiso,
+      fecha_fin: fechaPermiso,
+      motivo: motivoPermiso,
+      sustento_texto: motivoPermiso,
+      estado: 'pendiente',
+      dia_recuperacion: necesitaRecuperar ? diaRecuperacion : null,
+      hora_recuperacion_inicio: necesitaRecuperar ? horaRecuperacionInicio : null,
+      hora_recuperacion_fin: necesitaRecuperar ? horaRecuperacionFin : null,
+      recuperacion_aprobada: false
     }
     
-    // Si necesita recuperar, agregar los campos
     if (necesitaRecuperar && diaRecuperacion && horaRecuperacionInicio && horaRecuperacionFin) {
       permisoData.dia_recuperacion = diaRecuperacion
       permisoData.hora_recuperacion_inicio = horaRecuperacionInicio
@@ -148,21 +249,13 @@ export default function MiPanelPage() {
     setModalAv(false);setSaving(false);load()
   }
 
-  function franjas(dia:string){return horarios.filter(h=>h.dia===dia)}
-  function ultimoAvance(tid:string){return avances.filter(a=>a.tarea_id===tid).sort((a,b)=>b.semana.localeCompare(a.semana))[0]}
-
-  const franjasHoy = franjas(format(new Date(),'E').toLowerCase().slice(0,1))
-  const horarioHoyStr = franjasHoy.length>0
-    ? franjasHoy.map(f=>f.hora_entrada.slice(0,5)+'–'+f.hora_salida.slice(0,5)).join(' | ')
-    : 'Sin horario hoy'
-
   const horasMes = asistMes.filter(a=>a.hora_entrada&&a.hora_salida).reduce((acc,a)=>{
     const [he,me]=a.hora_entrada.split(':').map(Number)
     const [hs,ms]=a.hora_salida.split(':').map(Number)
     return acc+Math.max(0,((hs*60+ms)-(he*60+me))/60)
   },0)
+  
   const tareasActivas = tareas.filter(t=>t.estado==='en_progreso'||t.estado==='pendiente')
-  const tareasComp    = tareas.filter(t=>t.estado==='completada')
 
   const TIPO_PERMISO: Record<string,string> = {
     permiso_medico:'🏥 Médico',
@@ -189,6 +282,9 @@ export default function MiPanelPage() {
       </p>
     </div>
   )
+
+  const horaEntradaEsperada = getHoraEntradaEsperada()
+  const horaSalidaEsperada = getHoraSalidaEsperada()
 
   return (
     <div style={{maxWidth:680,margin:'0 auto'}}>
@@ -220,7 +316,7 @@ export default function MiPanelPage() {
           <div style={{fontSize:11,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.06em',marginTop:2}}>Tareas activas</div>
         </div>
         <div style={{background:'white',borderRadius:12,padding:'16px 18px',textAlign:'center',border:'1.5px solid #e2e8f0',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
-          <div style={{fontSize:28,fontWeight:700,color:'#002F6C'}}>{tareasComp.length}</div>
+          <div style={{fontSize:28,fontWeight:700,color:'#002F6C'}}>{tareas.filter(t=>t.estado==='completada').length}</div>
           <div style={{fontSize:11,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.06em',marginTop:2}}>Completadas</div>
         </div>
         <div style={{background:'#002F6C',borderRadius:12,padding:'16px 18px',textAlign:'center',boxShadow:'0 4px 12px rgba(0,47,108,.3)'}}>
@@ -228,6 +324,58 @@ export default function MiPanelPage() {
           <div style={{fontSize:11,color:'rgba(255,255,255,.6)',textTransform:'uppercase',letterSpacing:'.06em',marginTop:2}}>Horas acum.</div>
         </div>
       </div>
+
+      {/* 🕐 ALERTA DE RECUPERACIÓN APROBADA */}
+      {recuperacionHoy && (
+        <div style={{background:'#fef3c7',border:'2px solid #f59e0b',borderRadius:14,padding:'20px',marginBottom:20,boxShadow:'0 4px 12px rgba(245,158,11,0.2)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
+            <div style={{fontSize:32}}>🔄</div>
+            <div>
+              <div style={{fontSize:16,fontWeight:700,color:'#92400e',marginBottom:4}}>
+                ¡Hoy recuperas horas!
+              </div>
+              <div style={{fontSize:13,color:'#b45309'}}>
+                Tienes una recuperación aprobada para hoy
+              </div>
+            </div>
+          </div>
+          <div style={{background:'white',borderRadius:10,padding:'14px',border:'1px solid #fcd34d'}}>
+            <div style={{fontSize:13,color:'#78350f',marginBottom:8}}>
+              <strong>Horario de recuperación:</strong>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:14,color:'#92400e',fontWeight:600}}>
+              <span>🕐</span>
+              <span>{recuperacionHoy.hora_recuperacion_inicio?.slice(0,5)} - {recuperacionHoy.hora_recuperacion_fin?.slice(0,5)}</span>
+            </div>
+            {recuperacionHoy.motivo && (
+              <div style={{fontSize:12,color:'#78350f',marginTop:8,fontStyle:'italic'}}>
+                "{recuperacionHoy.motivo}"
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ⏰ ALERTA DE FLEXIBILIDAD */}
+      {flexibilidadHoy && (
+        <div style={{background:'#eff6ff',border:'2px solid #3b82f6',borderRadius:14,padding:'16px',marginBottom:20,boxShadow:'0 2px 8px rgba(59,130,246,0.15)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+            <span style={{fontSize:24}}>🕐</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:700,color:'#1e40af',marginBottom:2}}>
+                Flexibilidad Horaria Aprobada
+              </div>
+              <div style={{fontSize:12,color:'#1e40af',fontWeight:600}}>
+                +{flexibilidadHoy.minutos_gracia} minutos de gracia autorizados
+              </div>
+            </div>
+          </div>
+          <div style={{fontSize:12,color:'#1e3a8a',background:'white',padding:'10px',borderRadius:8,border:'1px solid #93c5fd'}}>
+            <strong>Motivo:</strong> {flexibilidadHoy.motivo}<br/>
+            <strong>Autorizado por:</strong> {flexibilidadHoy.personas?.nombre || 'Coordinador'}
+          </div>
+        </div>
+      )}
 
       {/* Card de asistencia */}
       <div style={{background:'white',borderRadius:16,border:'1.5px solid #e2e8f0',padding:'24px',marginBottom:16,boxShadow:'0 1px 3px rgba(0,0,0,.06)',textAlign:'center'}}>
@@ -239,25 +387,39 @@ export default function MiPanelPage() {
         <div style={{fontSize:52,fontWeight:700,color:'#002F6C',letterSpacing:'-1px',marginBottom:4,fontVariantNumeric:'tabular-nums'}}>{tiempo}</div>
         <div style={{fontSize:13,color:'#94a3b8',marginBottom:18}}>Marca tu asistencia del día de hoy</div>
 
+        {/* Horario esperado */}
+        <div style={{padding:'10px 14px',background:'#f0f9ff',borderRadius:9,border:'1px solid #bae6fd',fontSize:12,color:'#0369a1',marginBottom:16}}>
+          <div style={{marginBottom:4}}><strong> Tu horario hoy:</strong></div>
+          <div>Entrada: <strong>{horaEntradaEsperada}</strong> {flexibilidadHoy && `(con ${flexibilidadHoy.minutos_gracia}min de gracia)`}</div>
+          {horaSalidaEsperada && <div>Salida: <strong>{horaSalidaEsperada}</strong> {tiempoExtraHoy && '(con tiempo extra aprobado)'}}</div>
+        </div>
+
+        {/* Alertas */}
+        {alertaEntrada && (
+          <div style={{padding:'12px',background:'#fee2e2',border:'2px solid #ef4444',borderRadius:9,fontSize:13,color:'#b91c1c',marginBottom:16,fontWeight:600}}>
+            {alertaEntrada}
+          </div>
+        )}
+
         {/* Botones */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
           <button onClick={marcarEntrada} disabled={registrando||!!asistHoy?.hora_entrada}
             style={{padding:'16px',borderRadius:12,border:'none',cursor:asistHoy?.hora_entrada?'not-allowed':'pointer',
               background:asistHoy?.hora_entrada?'#dcfce7':'#16a34a',color:asistHoy?.hora_entrada?'#15803d':'white',
-              fontFamily:'inherit',fontWeight:700,fontSize:14,opacity:registrando?.7:1,transition:'all .2s'}}>
+              fontFamily:'inherit',fontWeight:700,fontSize:14,opacity:registrando?0.7:1,transition:'all .2s'}}>
             <div style={{fontSize:22,marginBottom:4}}>{asistHoy?.hora_entrada?'✅':'☑️'}</div>
             <div>Marcar Entrada</div>
-            <div style={{fontSize:11,fontWeight:400,opacity:.8,marginTop:2}}>{asistHoy?.hora_entrada?`Registrada: ${asistHoy.hora_entrada.slice(0,5)}`:'Registrar llegada'}</div>
+            <div style={{fontSize:11,fontWeight:400,opacity:.8,marginTop:2}}>{asistHoy?.hora_entrada?`Registrada: ${asistHoy.hora_entrada.slice(0,5)}`:`Esperando desde ${horaEntradaEsperada}`}</div>
           </button>
           <button onClick={marcarSalida} disabled={registrando||!asistHoy?.hora_entrada||!!asistHoy?.hora_salida}
             style={{padding:'16px',borderRadius:12,border:'none',
               cursor:(!asistHoy?.hora_entrada||asistHoy?.hora_salida)?'not-allowed':'pointer',
               background:asistHoy?.hora_salida?'#fee2e2':!asistHoy?.hora_entrada?'#f1f5f9':'#dc2626',
               color:asistHoy?.hora_salida?'#b91c1c':!asistHoy?.hora_entrada?'#94a3b8':'white',
-              fontFamily:'inherit',fontWeight:700,fontSize:14,opacity:registrando?.7:1,transition:'all .2s'}}>
+              fontFamily:'inherit',fontWeight:700,fontSize:14,opacity:registrando?0.7:1,transition:'all .2s'}}>
             <div style={{fontSize:22,marginBottom:4}}>{asistHoy?.hora_salida?'🚪':''}</div>
             <div>Marcar Salida</div>
-            <div style={{fontSize:11,fontWeight:400,opacity:.8,marginTop:2}}>{asistHoy?.hora_salida?`Registrada: ${asistHoy.hora_salida.slice(0,5)}`:'Registrar partida'}</div>
+            <div style={{fontSize:11,fontWeight:400,opacity:.8,marginTop:2}}>{asistHoy?.hora_salida?`Registrada: ${asistHoy.hora_salida.slice(0,5)}`:horaSalidaEsperada?`Hasta ${horaSalidaEsperada}`:'Sin entrada'}</div>
           </button>
         </div>
 
@@ -268,15 +430,9 @@ export default function MiPanelPage() {
             {asistHoy.hora_salida&&<span style={{marginLeft:8}}>· Salida: {asistHoy.hora_salida.slice(0,5)}</span>}
           </div>
         )}
-
-        {franjasHoy.length>0&&(
-          <div style={{padding:'8px 14px',background:'#eff6ff',borderRadius:9,border:'1px solid #93c5fd',fontSize:12,color:'#1d4ed8'}}>
-            🗓 Tu horario hoy: {horarioHoyStr}
-          </div>
-        )}
       </div>
 
-      {/* Solicitar permiso - ACTUALIZADO */}
+      {/* Solicitar permiso */}
       <div style={{background:'white',borderRadius:16,border:'1.5px solid #e2e8f0',padding:'20px 24px',marginBottom:16,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
           <span style={{fontSize:22}}>📋</span>
@@ -301,7 +457,6 @@ export default function MiPanelPage() {
           </div>
         </div>
 
-        {/* CHECKBOX RECUPERACIÓN */}
         <div style={{marginBottom:12,padding:10,background:'#f8fafc',borderRadius:8}}>
           <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
             <input type="checkbox" checked={necesitaRecuperar} onChange={e=>setNecesitaRecuperar(e.target.checked)}
@@ -321,7 +476,6 @@ export default function MiPanelPage() {
           )}
         </div>
 
-        {/* SUSTENTO TEXTO */}
         <div style={{marginBottom:12}}>
           <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5}}>Sustento / Motivo (Obligatorio)</label>
           <textarea value={motivoPermiso} onChange={e=>setMotivoPermiso(e.target.value)} rows={3}
@@ -332,12 +486,12 @@ export default function MiPanelPage() {
         {permisoOk&&<div style={{padding:'8px 14px',background:'#dcfce7',borderRadius:8,fontSize:12,color:'#15803d',fontWeight:600,marginBottom:10}}>✅ Solicitud enviada al coordinador</div>}
         
         <button onClick={enviarPermiso} disabled={enviandoPermiso||!motivoPermiso}
-          style={{width:'100%',padding:'13px',background:'#c9a227',color:'white',border:'none',borderRadius:10,fontFamily:'inherit',fontSize:14,fontWeight:700,cursor:motivoPermiso?'pointer':'not-allowed',opacity:(!motivoPermiso||enviandoPermiso)?.6:1}}>
+          style={{width:'100%',padding:'13px',background:'#c9a227',color:'white',border:'none',borderRadius:10,fontFamily:'inherit',fontSize:14,fontWeight:700,cursor:motivoPermiso?'pointer':'not-allowed',opacity:(!motivoPermiso||enviandoPermiso)?0.6:1}}>
           📨 {enviandoPermiso?'Enviando...':'Enviar solicitud al coordinador'}
         </button>
       </div>
 
-      {/* Mis tareas */}
+      {/* Mis tareas - SOLO ACTIVAS (no completadas) */}
       {tareas.length>0&&(
         <div style={{background:'white',borderRadius:16,border:'1.5px solid #e2e8f0',padding:'20px 24px',marginBottom:16,boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
           <div style={{fontSize:15,fontWeight:600,color:'#002F6C',marginBottom:14,display:'flex',alignItems:'center',gap:8}}>
@@ -346,7 +500,7 @@ export default function MiPanelPage() {
           </div>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
             {tareas.map(t=>{
-              const ua=ultimoAvance(t.id)
+              const ua=avances.find(a=>a.tarea_id===t.id)
               const PC: Record<string,string>={alta:'#fee2e2',media:'#fef3c7',baja:'#dcfce7'}
               const PT: Record<string,string>={alta:'#b91c1c',media:'#b45309',baja:'#15803d'}
               const EC: Record<string,string>={pendiente:'#f1f5f9',en_progreso:'#dbeafe',completada:'#dcfce7'}
@@ -388,6 +542,11 @@ export default function MiPanelPage() {
               )
             })}
           </div>
+          {tareas.length===0 && (
+            <div style={{textAlign:'center',padding:20,color:'#94a3b8',fontSize:13}}>
+              🎉 ¡No tienes tareas pendientes! Todas completadas.
+            </div>
+          )}
         </div>
       )}
 
@@ -413,11 +572,11 @@ export default function MiPanelPage() {
             <div style={{height:8,background:'#e2e8f0',borderRadius:10,overflow:'hidden',marginBottom:16}}>
               <div style={{height:'100%',width:`${mPct}%`,background:mPct>=100?'#16a34a':'#2563C8',borderRadius:10,transition:'width .3s'}}/>
             </div>
-            {mPct>=100&&<p style={{fontSize:12,color:'#16a34a',fontWeight:600,textAlign:'center',marginBottom:12}}>✓ Se marcará como completada</p>}
+            {mPct>=100&&<p style={{fontSize:12,color:'#16a34a',fontWeight:600,textAlign:'center',marginBottom:12}}>✓ Se marcará como completada y desaparecerá de tu vista</p>}
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <button onClick={()=>setModalAv(false)} style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>Cancelar</button>
               <button onClick={guardarAvance} disabled={saving||!mSem}
-                style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mSem||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mSem||saving)?.6:1}}>
+                style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mSem||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mSem||saving)?0.6:1}}>
                 {saving?'Guardando...':'Guardar avance'}
               </button>
             </div>
