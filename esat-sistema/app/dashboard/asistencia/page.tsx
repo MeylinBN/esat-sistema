@@ -1,10 +1,13 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { format } from 'date-fns'
+import { format, getDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 const DIAS: Record<number,string> = {1:'L',2:'M',3:'X',4:'J',5:'V',6:'S',0:'D'}
+const DIAS_COMPLETOS: Record<number,string> = {
+  1:'Lunes',2:'Martes',3:'Miércoles',4:'Jueves',5:'Viernes',6:'Sábado',0:'Domingo'
+}
 
 const GRUPOS = [
   {key:'Practicante', label:'🎓 Practicantes UNASAM', color:'#1e40af'},
@@ -35,7 +38,9 @@ const ESTADO_CFG: Record<string,{bg:string,border:string,pill:string,ptxt:string
 export default function AsistenciaPage() {
   const supabase = createClient()
   const hoy = format(new Date(),'yyyy-MM-dd')
-  const diaKey = DIAS[new Date().getDay()]
+  const diaSemana = getDay(new Date()) // 0=Domingo, 1=Lunes, ..., 6=Sábado
+  const diaKey = DIAS[diaSemana]
+  const esFinDeSemana = diaSemana === 0 || diaSemana === 6
 
   const [personas, setPersonas]       = useState<any[]>([])
   const [asistencias, setAsistencias] = useState<any[]>([])
@@ -48,10 +53,12 @@ export default function AsistenciaPage() {
   const [mPerId, setMPerId]           = useState('')
   const [mTipo, setMTipo]             = useState<'entrada'|'salida'>('entrada')
   const [mHora, setMHora]             = useState(format(new Date(),'HH:mm'))
+  const [mUsarHoraActual, setMUsarHoraActual] = useState(true)
   const [mEstado, setMEstado]         = useState('presente')
   const [mObs, setMObs]               = useState('')
   const [saving, setSaving]           = useState(false)
   const [verLista, setVerLista]       = useState(false)
+  const [mostrarAlertaFinSemana, setMostrarAlertaFinSemana] = useState(false)
   
   // Estados para recuperación de horas
   const [esRecuperacion, setEsRecuperacion] = useState(false)
@@ -64,9 +71,7 @@ export default function AsistenciaPage() {
       supabase.from('asistencias').select('*').eq('fecha',hoy),
       supabase.from('horarios').select('*'),
       supabase.from('tareas').select('persona_id,estado'),
-      // Cargar flexibilidad de hoy
       supabase.from('flexibilidad_horaria').select('*').eq('fecha',hoy),
-      // Cargar tiempo extra de hoy
       supabase.from('horas_extras').select('*').eq('fecha',hoy).eq('aprobado',true),
     ])
     setPersonas(p.data??[])
@@ -84,33 +89,38 @@ export default function AsistenciaPage() {
   function getHoy(pid:string){return horarios.filter(h=>h.persona_id===pid&&h.dia===diaKey)}
   function tareasActivas(pid:string){return tareas.filter(t=>t.persona_id===pid&&t.estado==='en_progreso').length}
   
-  // ✅ NUEVA FUNCIÓN: Verificar si tiene flexibilidad hoy
   function getFlexibilidad(pid:string){
     return flexibilidadHoy.find(f => f.persona_id === pid)
   }
   
-  // ✅ NUEVA FUNCIÓN: Verificar si tiene tiempo extra hoy
   function tieneTiempoExtra(pid:string){
     return tiempoExtraHoy.some(te => te.persona_id === pid)
   }
 
   async function guardar(){
     if(!mPerId){return}
+    
+    // ✅ Validar fin de semana
+    if(esFinDeSemana && !mObs.toLowerCase().includes('fin de semana') && !esRecuperacion) {
+      if(!confirm(`⚠️ Hoy es ${DIAS_COMPLETOS[diaSemana]}. ¿Estás seguro de registrar asistencia en fin de semana?`)) {
+        return
+      }
+    }
+    
     setSaving(true)
     
-    const horaCompleta = mHora+':00'
+    const horaRegistro = mUsarHoraActual ? format(new Date(),'HH:mm') : mHora
+    const horaCompleta = horaRegistro+':00'
     const asist = getA(mPerId)
     const persona = personas.find(p=>p.id===mPerId)
     
-    // ✅ Obtener flexibilidad si existe
     const flex = getFlexibilidad(mPerId)
     const minutosGracia = flex?.minutos_gracia || 0
     
     let tard=0
     if(persona?.hora_ingreso&&mTipo==='entrada' && !esRecuperacion){
       const [hE,mE]=persona.hora_ingreso.split(':').map(Number)
-      const [hR,mR]=mHora.split(':').map(Number)
-      // ✅ Sumar tolerancia + minutos de gracia de flexibilidad
+      const [hR,mR]=horaRegistro.split(':').map(Number)
       const toleranciaTotal = (persona.tolerancia??10) + minutosGracia
       tard=Math.max(0,(hR*60+mR)-(hE*60+mE)-toleranciaTotal)
     }
@@ -166,13 +176,37 @@ export default function AsistenciaPage() {
           <h1 style={{fontFamily:'Lora,serif',fontSize:24,color:'#002F6C',fontWeight:600}}>Control de asistencia</h1>
           <p style={{fontSize:12,color:'#475569',marginTop:3,textTransform:'capitalize'}}>
             {format(new Date(),"EEEE d 'de' MMMM 'del' yyyy",{locale:es})}
+            {esFinDeSemana && <span style={{marginLeft:8,color:'#dc2626',fontWeight:600}}>⚠️ Fin de semana</span>}
           </p>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           <button onClick={()=>setVerLista(!verLista)} style={{padding:'8px 16px',background:'white',border:'1.5px solid #e2e8f0',borderRadius:8,cursor:'pointer',fontWeight:600}}>{verLista?'Ver tarjetas':'Ver lista completa'}</button>
-          <button onClick={()=>{setMPerId('');setModal(true)}} style={{padding:'8px 16px',background:'#002F6C',color:'white',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600}}>+ Registrar</button>
+          <button onClick={()=>{
+            if(esFinDeSemana) {
+              if(confirm('⚠️ Hoy es fin de semana. ¿Deseas registrar asistencia de todas formas?')) {
+                setMPerId('');setModal(true)
+              }
+            } else {
+              setMPerId('');setModal(true)
+            }
+          }} style={{padding:'8px 16px',background:'#002F6C',color:'white',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600}}>+ Registrar</button>
         </div>
       </div>
+
+      {/* Alerta fin de semana */}
+      {esFinDeSemana && (
+        <div style={{background:'#fef3c7',border:'2px solid #f59e0b',borderRadius:12,padding:'16px 20px',marginBottom:20,display:'flex',alignItems:'center',gap:12}}>
+          <div style={{fontSize:24}}>⚠️</div>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:'#92400e',marginBottom:4}}>
+              Hoy es {DIAS_COMPLETOS[diaSemana]} - Día no laborable
+            </div>
+            <div style={{fontSize:12,color:'#b45309'}}>
+              Solo registra asistencia si es trabajo extraordinario o recuperación de horas. Se requiere justificación.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Métricas */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14,marginBottom:20}}>
@@ -234,7 +268,6 @@ export default function AsistenciaPage() {
                           <div style={{width:38,height:38,borderRadius:'50%',background:p.color,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:14,color:'white',flexShrink:0,position:'relative'}}>
                             {p.nombre.charAt(0)}
                             <div style={{position:'absolute',inset:-2,borderRadius:'50%',border:`2px solid ${cfg.border}`}}/>
-                            {/* Indicador de flexibilidad o tiempo extra */}
                             {(tieneFlex || tieneTE) && (
                               <div style={{position:'absolute',top:-2,right:-2,width:12,height:12,borderRadius:'50%',background:'#7c3aed',border:'2px solid white',display:'flex',alignItems:'center',justifyContent:'center'}}>
                                 <span style={{fontSize:8,color:'white'}}>🕐</span>
@@ -247,7 +280,6 @@ export default function AsistenciaPage() {
                             <div style={{fontSize:9,color:'#94a3b8',marginTop:1}}>
                               {p.rol==='SENATI'?`Prac. SENATI · ${p.subrol}`:p.rol==='Practicante'?`Prac. UNASAM · ${p.subrol}`:p.rol}
                             </div>
-                            {/* Badge de flexibilidad/TE */}
                             {(tieneFlex || tieneTE) && (
                               <div style={{fontSize:9,color:'#7c3aed',marginTop:2,fontWeight:600}}>
                                 {tieneFlex && `🕐 +${tieneFlex.minutos_gracia}min`}
@@ -287,7 +319,6 @@ export default function AsistenciaPage() {
             )
           })}
 
-          {/* EcoBIOTEM */}
           {eco.length>0&&(
             <div style={{background:'white',borderRadius:14,border:'2px solid #86efac',marginBottom:24,padding:20}}>
               <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:12,display:'flex',alignItems:'center',gap:8}}>
@@ -300,7 +331,6 @@ export default function AsistenciaPage() {
           )}
         </>
       ) : (
-        /* Vista lista completa */
         <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',overflow:'hidden'}}>
           <div style={{padding:20,borderBottom:'1px solid #e2e8f0',display:'flex',alignItems:'center',gap:8}}>
             <div style={{width:8,height:8,borderRadius:'50%',background:'#002F6C'}}/>
@@ -355,14 +385,24 @@ export default function AsistenciaPage() {
         </div>
       )}
 
-      {/* Modal con recuperación de horas */}
+      {/* Modal */}
       {modal&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>{if(e.target===e.currentTarget)setModal(false)}}>
-          <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:450,boxShadow:'0 24px 80px rgba(0,0,0,.25)',maxHeight:'90vh',overflowY:'auto'}}>
+          <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:480,boxShadow:'0 24px 80px rgba(0,0,0,.25)',maxHeight:'90vh',overflowY:'auto'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
               <h3 style={{fontSize:16,fontWeight:700,margin:0}}>Registrar asistencia</h3>
               <button onClick={()=>setModal(false)} style={{width:28,height:28,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
             </div>
+            
+            {/* Alerta fin de semana en modal */}
+            {esFinDeSemana && (
+              <div style={{background:'#fef3c7',border:'1.5px solid #f59e0b',borderRadius:9,padding:'12px',marginBottom:16,display:'flex',alignItems:'center',gap:8}}>
+                <span style={{fontSize:18}}>⚠️</span>
+                <span style={{fontSize:12,color:'#92400e',fontWeight:600}}>
+                  Registrando en fin de semana - Requiere justificación
+                </span>
+              </div>
+            )}
             
             <div style={{marginBottom:16}}>
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Persona</label>
@@ -408,6 +448,35 @@ export default function AsistenciaPage() {
               </div>
             </div>
 
+            {/* ✅ NUEVO: Toggle hora automática vs manual */}
+            <div style={{marginBottom:12}}>
+              <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:10}}>
+                <input 
+                  type="checkbox" 
+                  checked={mUsarHoraActual}
+                  onChange={e=>setMUsarHoraActual(e.target.checked)}
+                  style={{width:16,height:16,accentColor:'#002F6C'}}
+                />
+                <span style={{fontSize:12,fontWeight:600,color:'#475569'}}>
+                  ⏰ Usar hora actual ({format(new Date(),'HH:mm:ss')})
+                </span>
+              </label>
+              
+              {!mUsarHoraActual && (
+                <div style={{marginTop:10}}>
+                  <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>
+                    Hora de registro:
+                  </label>
+                  <input 
+                    type="time" 
+                    value={mHora}
+                    onChange={e=>setMHora(e.target.value)}
+                    style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
+                  />
+                </div>
+              )}
+            </div>
+
             {/* Checkbox de recuperación */}
             <div style={{marginBottom:12}}>
               <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
@@ -423,7 +492,6 @@ export default function AsistenciaPage() {
               </label>
             </div>
 
-            {/* Motivo de recuperación */}
             {esRecuperacion && (
               <div style={{marginBottom:12,padding:'10px 12px',background:'#eff6ff',borderRadius:9,border:'1px solid #bfdbfe'}}>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#1e40af',marginBottom:6}}>
@@ -436,26 +504,30 @@ export default function AsistenciaPage() {
                   rows={2}
                   style={{width:'100%',padding:'8px',border:'1px solid #bfdbfe',borderRadius:6,fontSize:12,fontFamily:'inherit'}}
                 />
-                <p style={{fontSize:10,color:'#64748b',marginTop:4}}>
-                  ℹ️ Esta hora se registrará pero requerirá aprobación del coordinador
-                </p>
               </div>
             )}
             
             <div style={{marginBottom:16}}>
-              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Observación (opcional)</label>
-              <input type="text" value={mObs} onChange={e=>setMObs(e.target.value)} placeholder="Ej: llegó tarde por transporte" style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
-            </div>
-            
-            <div style={{background:'#f0f9ff',border:'1px solid #bae6fd',borderRadius:9,padding:'10px 12px',marginBottom:16}}>
-              <div style={{fontSize:11,color:'#0369a1'}}>
-                ⏰ <strong>Hora automática:</strong> {format(new Date(),'HH:mm:ss')}
-              </div>
+              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>
+                Observación {esFinDeSemana && <span style={{color:'#dc2626'}}>*</span>}
+              </label>
+              <textarea 
+                value={mObs} 
+                onChange={e=>setMObs(e.target.value)} 
+                placeholder={esFinDeSemana ? "Obligatorio: Justificar trabajo en fin de semana" : "Ej: llegó tarde por transporte"} 
+                rows={esFinDeSemana ? 3 : 2}
+                style={{width:'100%',padding:'9px 12px',border:`1.5px solid ${esFinDeSemana ? '#fca5a5' : '#e2e8f0'}`,borderRadius:9,fontFamily:'inherit',fontSize:13}}
+              />
+              {esFinDeSemana && (
+                <p style={{fontSize:10,color:'#dc2626',marginTop:4}}>
+                  ⚠️ Campo obligatorio para registro en fin de semana
+                </p>
+              )}
             </div>
             
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <button onClick={()=>setModal(false)} style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>Cancelar</button>
-              <button onClick={guardar} disabled={saving||!mPerId} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mPerId||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mPerId||saving)?0.6:1}}>
+              <button onClick={guardar} disabled={saving||!mPerId||(esFinDeSemana&&!mObs.trim())} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mPerId||saving||(esFinDeSemana&&!mObs.trim()))?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mPerId||saving||(esFinDeSemana&&!mObs.trim()))?0.6:1}}>
                 {saving?'Guardando...':'Confirmar'}
               </button>
             </div>
