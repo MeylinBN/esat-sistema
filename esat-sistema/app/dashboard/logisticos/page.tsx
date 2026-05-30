@@ -15,24 +15,24 @@ export default function DashboardLogisticoPage() {
   const [asistHoy, setAsistHoy] = useState<any[]>([])
   const [permisos, setPermisos] = useState<any[]>([])
   const [tareas, setTareas] = useState<any[]>([])
-  const [horasExtras, setHorasExtras] = useState<any[]>([])
+  const [tiempoExtra, setTiempoExtra] = useState<any[]>([])
   const [flexibilidadHoy, setFlexibilidadHoy] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   
   // Estados para Flexibilidad Horaria
   const [modalFlex, setModalFlex] = useState(false)
-  const [flexPersona, setFlexPersona] = useState('')
-  const [flexFecha, setFlexFecha] = useState('')
+  const [flexPersonas, setFlexPersonas] = useState<string[]>([])
+  const [flexFecha, setFlexFecha] = useState(hoy)
   const [flexMinutos, setFlexMinutos] = useState('15')
   const [flexMotivo, setFlexMotivo] = useState('')
 
-  // Estados para Horas Extras
-  const [modalHoraExtra, setModalHoraExtra] = useState(false)
-  const [hePersona, setHePersona] = useState('')
-  const [heFecha, setHeFecha] = useState('')
-  const [heHoraInicio, setHeHoraInicio] = useState('')
-  const [heHoraFin, setHeHoraFin] = useState('')
-  const [heMotivo, setHeMotivo] = useState('')
+  // Estados para Tiempo Extra
+  const [modalTiempoExtra, setModalTiempoExtra] = useState(false)
+  const [tePersonas, setTePersonas] = useState<string[]>([])
+  const [teFecha, setTeFecha] = useState(hoy)
+  const [teHoraInicio, setTeHoraInicio] = useState('')
+  const [teHoraFin, setTeHoraFin] = useState('')
+  const [teMotivo, setTeMotivo] = useState('')
 
   useEffect(()=>{load()},[])
 
@@ -52,7 +52,7 @@ export default function DashboardLogisticoPage() {
     const grupoAsignado = esFrancisco ? 'EcoBIOTEM' : 'ESAT'
     const rolFiltro = esFrancisco ? 'EcoBIOTEM' : ['Practicante','SENATI','Voluntario','Asistente']
 
-    const [p, ah, perm, tar, he, flex] = await Promise.all([
+    const [p, ah, perm, tar, te, flex] = await Promise.all([
       supabase.from('personas')
         .select('*')
         .eq('activo', true)
@@ -72,13 +72,13 @@ export default function DashboardLogisticoPage() {
         .neq('estado', 'cancelada')
         .order('created_at', {ascending:false})
         .limit(10),
-      // Horas extras registradas (aprobadas automáticamente)
+      // Tiempo extra - SOLO HOY
       supabase.from('horas_extras')
         .select('*, personas(nombre,color,rol)')
+        .eq('fecha', hoy)
         .eq('aprobado', true)
-        .order('created_at', {ascending:false})
-        .limit(5),
-      // Flexibilidad horaria de hoy
+        .order('created_at', {ascending:false}),
+      // Flexibilidad horaria - SOLO HOY
       supabase.from('flexibilidad_horaria')
         .select('*, personas(nombre)')
         .eq('fecha', hoy)
@@ -92,50 +92,45 @@ export default function DashboardLogisticoPage() {
     setAsistHoy(asistFiltrada)
     setPermisos(perm.data ?? [])
     setTareas(tar.data ?? [])
-    setHorasExtras(he.data ?? [])
+    setTiempoExtra(te.data ?? [])
     setFlexibilidadHoy(flex.data ?? [])
     setLoading(false)
   }
 
- async function registrarHoraExtra() {
-  if(!heFecha || !heHoraInicio || !heHoraFin) {
-    alert('Completa todos los campos')
-    return
+  async function registrarTiempoExtra() {
+    if(tePersonas.length === 0 || !teFecha || !teHoraInicio || !teHoraFin) {
+      alert('Selecciona al menos una persona y completa los campos')
+      return
+    }
+    
+    // Calcular horas
+    const inicio = new Date(`2000-01-01T${teHoraInicio}`)
+    const fin = new Date(`2000-01-01T${teHoraFin}`)
+    const horas = (fin.getTime() - inicio.getTime()) / (1000 * 60 * 60)
+    
+    // Registrar para cada persona seleccionada
+    for (const personaId of tePersonas) {
+      await supabase.from('horas_extras').insert({
+        persona_id: personaId,
+        fecha: teFecha,
+        hora_inicio: teHoraInicio + ':00',
+        hora_fin: teHoraFin + ':00',
+        horas_solicitadas: horas,
+        motivo: teMotivo,
+        aprobado: true,
+        aprobado_por: coordinador?.id
+      })
+    }
+    
+    setModalTiempoExtra(false)
+    setTePersonas([])
+    setTeFecha(hoy)
+    setTeHoraInicio('')
+    setTeHoraFin('')
+    setTeMotivo('')
+    alert(`Tiempo extra registrado para ${tePersonas.length} persona(s)`)
+    load()
   }
-  
-  // Calcular horas
-  const inicio = new Date(`2000-01-01T${heHoraInicio}`)
-  const fin = new Date(`2000-01-01T${heHoraFin}`)
-  const horas = (fin.getTime() - inicio.getTime()) / (1000 * 60 * 60)
-  
-  // Determinar a quiénes aplicar
-  const personasARegistrar = hePersona === 'TODOS' 
-    ? personas 
-    : personas.filter(p => p.id === hePersona)
-  
-  // Registrar para cada persona
-  for (const persona of personasARegistrar) {
-    await supabase.from('horas_extras').insert({
-      persona_id: persona.id,
-      fecha: heFecha,
-      hora_inicio: heHoraInicio + ':00',
-      hora_fin: heHoraFin + ':00',
-      horas_solicitadas: horas,
-      motivo: heMotivo,
-      aprobado: true,
-      aprobado_por: coordinador?.id
-    })
-  }
-  
-  setModalHoraExtra(false)
-  setHePersona('')
-  setHeFecha('')
-  setHeHoraInicio('')
-  setHeHoraFin('')
-  setHeMotivo('')
-  alert(`Hora extra registrada para ${personasARegistrar.length} persona(s)`)
-  load()
-}
 
   async function aprobarPermiso(id: string, estado: string) {
     await supabase.from('permisos').update({
@@ -147,25 +142,28 @@ export default function DashboardLogisticoPage() {
   }
 
   async function guardarFlexibilidad() {
-    if(!flexPersona || !flexFecha || !flexMotivo) {
-      alert('Completa todos los campos')
+    if(flexPersonas.length === 0 || !flexFecha || !flexMotivo) {
+      alert('Selecciona al menos una persona y completa los campos')
       return
     }
     
-    await supabase.from('flexibilidad_horaria').insert({
-      persona_id: flexPersona,
-      fecha: flexFecha,
-      minutos_gracia: parseInt(flexMinutos),
-      motivo: flexMotivo,
-      autorizado_por: coordinador?.id
-    })
+    // Registrar para cada persona seleccionada
+    for (const personaId of flexPersonas) {
+      await supabase.from('flexibilidad_horaria').insert({
+        persona_id: personaId,
+        fecha: flexFecha,
+        minutos_gracia: parseInt(flexMinutos),
+        motivo: flexMotivo,
+        autorizado_por: coordinador?.id
+      })
+    }
     
     setModalFlex(false)
-    setFlexPersona('')
-    setFlexFecha('')
+    setFlexPersonas([])
+    setFlexFecha(hoy)
     setFlexMinutos('15')
     setFlexMotivo('')
-    alert('Flexibilidad registrada correctamente')
+    alert(`Flexibilidad registrada para ${flexPersonas.length} persona(s)`)
     load()
   }
 
@@ -379,140 +377,249 @@ export default function DashboardLogisticoPage() {
         </div>
       </div>
 
-      {/* Horas Extras Registradas */}
+      {/* Tiempo Extra - SOLO HOY */}
       <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)', marginBottom: 16}}>
         <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <span style={{display:'flex',alignItems:'center',gap:8}}>
             <div style={{width:8,height:8,borderRadius:'50%',background:'#7c3aed'}}/>
-            ⏱ Horas Extras Registradas
+            ⏱ Tiempo Extra - Hoy
           </span>
-          <button onClick={() => setModalHoraExtra(true)} style={{fontSize:11,color:'#002F6C',background:'none',border:'none',cursor:'pointer',fontWeight:500}}>
-            + Registrar hora extra
+          <button onClick={() => setModalTiempoExtra(true)} style={{fontSize:11,color:'#002F6C',background:'none',border:'none',cursor:'pointer',fontWeight:500}}>
+            + Registrar tiempo extra
           </button>
         </div>
         <p style={{fontSize:12,color:'#64748b',marginBottom:12}}>
-          Registra cuando una persona trabaje más allá de su horario normal.
+          Registra cuando una persona trabaje más allá de su horario normal hoy.
         </p>
         
-        {horasExtras.length > 0 && (
+        {tiempoExtra.length > 0 && (
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {horasExtras.map(he => (
-              <div key={he.id} style={{
+            {tiempoExtra.map(te => (
+              <div key={te.id} style={{
                 padding:'10px 14px',background:'#f5f3ff',
                 borderRadius:9,border:'1px solid #ddd6fe'
               }}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
                   <div style={{
                     width:26,height:26,borderRadius:'50%',
-                    background:he.personas?.color||'#94a3b8',
+                    background:te.personas?.color||'#94a3b8',
                     display:'flex',alignItems:'center',justifyContent:'center',
                     fontSize:10,fontWeight:700,color:'white'
                   }}>
-                    {he.personas?.nombre?.charAt(0)}
+                    {te.personas?.nombre?.charAt(0)}
                   </div>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:12,fontWeight:600}}>{he.personas?.nombre}</div>
-                    <div style={{fontSize:10,color:'#94a3b8'}}>{he.personas?.rol}</div>
+                    <div style={{fontSize:12,fontWeight:600}}>{te.personas?.nombre}</div>
+                    <div style={{fontSize:10,color:'#94a3b8'}}>{te.personas?.rol}</div>
                   </div>
                 </div>
                 <div style={{fontSize:11,color:'#475569',marginBottom:4}}>
-                  📅 {he.fecha} · 🕐 {he.hora_inicio?.slice(0,5)} - {he.hora_fin?.slice(0,5)} ({he.horas_solicitadas?.toFixed(1)}h)
+                  🕐 {te.hora_inicio?.slice(0,5)} - {te.hora_fin?.slice(0,5)} ({te.horas_solicitadas?.toFixed(1)}h)
                 </div>
-                {he.motivo && (
+                {te.motivo && (
                   <div style={{fontSize:11,color:'#64748b',fontStyle:'italic'}}>
-                    "{he.motivo}"
+                    "{te.motivo}"
                   </div>
                 )}
               </div>
             ))}
           </div>
         )}
-        {horasExtras.length === 0 && (
+        {tiempoExtra.length === 0 && (
           <div style={{textAlign:'center',padding:16,color:'#94a3b8',fontSize:13}}>
-            No hay horas extras registradas
+            No hay tiempo extra registrado para hoy
           </div>
         )}
       </div>
 
-      {/* Modal Registrar Hora Extra */}
-      {modalHoraExtra && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999}} onClick={()=>setModalHoraExtra(false)}>
-          <div style={{background:'white',padding:24,borderRadius:12,width:400,maxWidth:'90%'}} onClick={e=>e.stopPropagation()}>
-            <h3 style={{marginBottom:16,fontSize:16,fontWeight:600}}>Registrar Hora Extra</h3>
+      {/* Modal Registrar Tiempo Extra - CON TAGS */}
+      {modalTiempoExtra && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999}} onClick={()=>setModalTiempoExtra(false)}>
+          <div style={{background:'white',padding:24,borderRadius:12,width:500,maxWidth:'90%',maxHeight:'90vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
+            <h3 style={{marginBottom:16,fontSize:16,fontWeight:600}}>Registrar Tiempo Extra - {format(new Date(teFecha || hoy), 'dd/MM/yyyy')}</h3>
             
+            {/* Personas - Sistema de Tags */}
             <div style={{marginBottom:12}}>
-              <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Persona</label>
-             <select value={hePersona} onChange={e=>setHePersona(e.target.value)} style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}}>
-  <option value="">Seleccionar...</option>
-  <option value="TODOS">👥 Todas las personas</option>
-  {personas.map(p => (
-    <option key={p.id} value={p.id}>{p.nombre}</option>
-  ))}
-</select>
+              <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:6}}>
+                Personas ({tePersonas.length} seleccionada{tePersonas.length!==1?'s':''})
+              </label>
+              
+              {/* Tags */}
+              <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8,minHeight:40,padding:10,background:'#f8fafc',border:'1.5px solid #e2e8f0',borderRadius:8}}>
+                {tePersonas.map(id => {
+                  const p = personas.find(x => x.id === id)
+                  if(!p) return null
+                  return (
+                    <div key={id} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',background:'#7c3aed',color:'white',borderRadius:6,fontSize:12,fontWeight:500,boxShadow:'0 1px 3px rgba(124,58,237,0.3)'}}>
+                      <span>{p.nombre}</span>
+                      <button onClick={()=>setTePersonas(tePersonas.filter(x=>x!==id))} style={{background:'rgba(255,255,255,0.3)',border:'none',cursor:'pointer',color:'white',fontSize:14,width:18,height:18,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',padding:0}}>×</button>
+                    </div>
+                  )
+                })}
+                {tePersonas.length === 0 && <span style={{color:'#94a3b8',fontSize:12}}>Selecciona personas...</span>}
+              </div>
+              
+              {/* Dropdown */}
+              <select 
+                value=""
+                onChange={e=>{if(e.target.value) setTePersonas([...tePersonas, e.target.value])}}
+                style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6,fontSize:12}}
+              >
+                <option value="">+ Agregar persona...</option>
+                {personas.filter(p => !tePersonas.includes(p.id)).map(p => (
+                  <option key={p.id} value={p.id}>{p.nombre} · {p.rol}</option>
+                ))}
+              </select>
             </div>
-            
-            <div style={{marginBottom:12}}>
-              <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Fecha</label>
-              <input type="date" value={heFecha} onChange={e=>setHeFecha(e.target.value)} style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}} />
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Fecha</label>
+                <input type="date" value={teFecha} onChange={e=>setTeFecha(e.target.value)} style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6}} />
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Minutos de Gracia</label>
+                <input type="number" value={flexMinutos} onChange={e=>setFlexMinutos(e.target.value)} placeholder="15" style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6}} />
+              </div>
             </div>
             
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
               <div>
                 <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Hora Inicio</label>
-                <input type="time" value={heHoraInicio} onChange={e=>setHeHoraInicio(e.target.value)} style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}} />
+                <input type="time" value={teHoraInicio} onChange={e=>setTeHoraInicio(e.target.value)} style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6}} />
               </div>
               <div>
                 <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Hora Fin</label>
-                <input type="time" value={heHoraFin} onChange={e=>setHeHoraFin(e.target.value)} style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}} />
+                <input type="time" value={teHoraFin} onChange={e=>setTeHoraFin(e.target.value)} style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6}} />
               </div>
             </div>
             
             <div style={{marginBottom:16}}>
               <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Motivo</label>
-              <textarea value={heMotivo} onChange={e=>setHeMotivo(e.target.value)} rows={3} placeholder="Ej: Entrega de proyecto urgente" style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}} />
+              <textarea value={teMotivo} onChange={e=>setTeMotivo(e.target.value)} rows={3} placeholder="Ej: Entrega de proyecto urgente" style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6}} />
             </div>
             
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-              <button onClick={()=>setModalHoraExtra(false)} style={{padding:'8px 16px',borderRadius:6,border:'1px solid #e2e8f0',background:'white',cursor:'pointer'}}>Cancelar</button>
-              <button onClick={registrarHoraExtra} style={{padding:'8px 16px',borderRadius:6,border:'none',background:'#002F6C',color:'white',cursor:'pointer'}}>Guardar</button>
+              <button onClick={()=>setModalTiempoExtra(false)} style={{padding:'8px 16px',borderRadius:6,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontWeight:600}}>Cancelar</button>
+              <button onClick={registrarTiempoExtra} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#7c3aed',color:'white',cursor:'pointer',fontWeight:600'}}>Registrar para {tePersonas.length} persona{tePersonas.length!==1?'s':''}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Flexibilidad Horaria */}
+      {/* Flexibilidad Horaria - SOLO HOY */}
       <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)', marginBottom: 16}}>
         <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <span style={{display:'flex',alignItems:'center',gap:8}}>
             <div style={{width:8,height:8,borderRadius:'50%',background:'#8b5cf6'}}/>
-            ⏰ Flexibilidad Horaria
+            ⏰ Flexibilidad Horaria - Hoy
           </span>
           <button onClick={() => setModalFlex(true)} style={{fontSize:11,color:'#002F6C',background:'none',border:'none',cursor:'pointer',fontWeight:500}}>
             + Registrar flexibilidad
           </button>
         </div>
         <p style={{fontSize:12,color:'#64748b',marginBottom:12}}>
-          Permite que personas específicas lleguen tarde un día sin que se marque como tardanza.
+          Permite que personas específicas lleguen tarde hoy sin que se marque como tardanza.
         </p>
         {flexibilidadHoy.length > 0 && (
           <div style={{display:'flex',flexDirection:'column',gap:6}}>
             {flexibilidadHoy.map(f => (
               <div key={f.id} style={{
-                padding:'8px 12px',background:'#f0f9ff',
-                borderRadius:7,border:'1px solid #bae6fd',
+                padding:'10px 14px',background:'#f0f9ff',
+                borderRadius:8,border:'1.5px solid #bae6fd',
                 fontSize:12,color:'#0369a1'
               }}>
-                <strong>{f.personas?.nombre}</strong> - {f.minutos_gracia} min de gracia · {f.motivo}
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                  <div style={{
+                    width:28,height:28,borderRadius:'50%',
+                    background:'#3b82f6',
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    fontSize:12,fontWeight:700,color:'white'
+                  }}>
+                    {f.personas?.nombre?.charAt(0)}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:600}}>{f.personas?.nombre}</div>
+                    <div style={{fontSize:10,color:'#0369a1',fontStyle:'italic'}}>{f.motivo}</div>
+                  </div>
+                  <div style={{fontSize:11,fontWeight:600,color:'#0284c7',background:'#e0f2fe',padding:'4px 8px',borderRadius:6}}>
+                    {f.minutos_gracia} min
+                  </div>
+                </div>
               </div>
             ))}
           </div>
         )}
         {flexibilidadHoy.length === 0 && (
-          <div style={{textAlign:'center',padding:12,color:'#94a3b8',fontSize:12}}>
+          <div style={{textAlign:'center',padding:16,color:'#94a3b8',fontSize:13}}>
             No hay flexibilidad registrada para hoy
           </div>
         )}
       </div>
+
+      {/* Modal Flexibilidad Horaria - CON TAGS */}
+      {modalFlex && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999}} onClick={()=>setModalFlex(false)}>
+          <div style={{background:'white',padding:24,borderRadius:12,width:500,maxWidth:'90%',maxHeight:'90vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
+            <h3 style={{marginBottom:16,fontSize:16,fontWeight:600}}>Registrar Flexibilidad Horaria - {format(new Date(flexFecha || hoy), 'dd/MM/yyyy')}</h3>
+            
+            {/* Personas - Sistema de Tags */}
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:6}}>
+                Personas ({flexPersonas.length} seleccionada{flexPersonas.length!==1?'s':''})
+              </label>
+              
+              {/* Tags */}
+              <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8,minHeight:40,padding:10,background:'#f0f9ff',border:'1.5px solid #bae6fd',borderRadius:8}}>
+                {flexPersonas.map(id => {
+                  const p = personas.find(x => x.id === id)
+                  if(!p) return null
+                  return (
+                    <div key={id} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',background:'#3b82f6',color:'white',borderRadius:6,fontSize:12,fontWeight:500,boxShadow:'0 1px 3px rgba(59,130,246,0.3)'}}>
+                      <span>{p.nombre}</span>
+                      <button onClick={()=>setFlexPersonas(flexPersonas.filter(x=>x!==id))} style={{background:'rgba(255,255,255,0.3)',border:'none',cursor:'pointer',color:'white',fontSize:14,width:18,height:18,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',padding:0}}>×</button>
+                    </div>
+                  )
+                })}
+                {flexPersonas.length === 0 && <span style={{color:'#94a3b8',fontSize:12}}>Selecciona personas...</span>}
+              </div>
+              
+              {/* Dropdown */}
+              <select 
+                value=""
+                onChange={e=>{if(e.target.value) setFlexPersonas([...flexPersonas, e.target.value])}}
+                style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6,fontSize:12}}
+              >
+                <option value="">+ Agregar persona...</option>
+                {personas.filter(p => !flexPersonas.includes(p.id)).map(p => (
+                  <option key={p.id} value={p.id}>{p.nombre} · {p.rol}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Fecha</label>
+                <input type="date" value={flexFecha} onChange={e=>setFlexFecha(e.target.value)} style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6}} />
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Minutos de Gracia</label>
+                <input type="number" value={flexMinutos} onChange={e=>setFlexMinutos(e.target.value)} placeholder="15" style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6}} />
+              </div>
+            </div>
+            
+            <div style={{marginBottom:16}}>
+              <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Motivo</label>
+              <textarea value={flexMotivo} onChange={e=>setFlexMotivo(e.target.value)} rows={3} placeholder="Ej: Reunión general de ESAT" style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6}} />
+            </div>
+            
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <button onClick={()=>setModalFlex(false)} style={{padding:'8px 16px',borderRadius:6,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontWeight:600}}>Cancelar</button>
+              <button onClick={guardarFlexibilidad} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#3b82f6',color:'white',cursor:'pointer',fontWeight:600'}}>Registrar para {flexPersonas.length} persona{flexPersonas.length!==1?'s':''}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tareas activas */}
       <div style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
@@ -566,45 +673,6 @@ export default function DashboardLogisticoPage() {
           )}
         </div>
       </div>
-
-      {/* Modal Flexibilidad Horaria */}
-      {modalFlex && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999}} onClick={()=>setModalFlex(false)}>
-          <div style={{background:'white',padding:24,borderRadius:12,width:400,maxWidth:'90%'}} onClick={e=>e.stopPropagation()}>
-            <h3 style={{marginBottom:16,fontSize:16,fontWeight:600}}>Registrar Flexibilidad Horaria</h3>
-            
-            <div style={{marginBottom:12}}>
-              <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Persona</label>
-              <select value={flexPersona} onChange={e=>setFlexPersona(e.target.value)} style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}}>
-                <option value="">Seleccionar...</option>
-                {personas.map(p => (
-                  <option key={p.id} value={p.id}>{p.nombre}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div style={{marginBottom:12}}>
-              <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Fecha</label>
-              <input type="date" value={flexFecha} onChange={e=>setFlexFecha(e.target.value)} style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}} />
-            </div>
-            
-            <div style={{marginBottom:12}}>
-              <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Minutos de Gracia</label>
-              <input type="number" value={flexMinutos} onChange={e=>setFlexMinutos(e.target.value)} placeholder="15" style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}} />
-            </div>
-            
-            <div style={{marginBottom:16}}>
-              <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Motivo</label>
-              <textarea value={flexMotivo} onChange={e=>setFlexMotivo(e.target.value)} rows={3} placeholder="Ej: Reunión general de ESAT" style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}} />
-            </div>
-            
-            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-              <button onClick={()=>setModalFlex(false)} style={{padding:'8px 16px',borderRadius:6,border:'1px solid #e2e8f0',background:'white',cursor:'pointer'}}>Cancelar</button>
-              <button onClick={guardarFlexibilidad} style={{padding:'8px 16px',borderRadius:6,border:'none',background:'#002F6C',color:'white',cursor:'pointer'}}>Guardar</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
