@@ -97,37 +97,45 @@ export default function DashboardLogisticoPage() {
     setLoading(false)
   }
 
-  async function registrarHoraExtra() {
-    if(!hePersona || !heFecha || !heHoraInicio || !heHoraFin) {
-      alert('Completa todos los campos')
-      return
-    }
-    
-    // Calcular horas
-    const inicio = new Date(`2000-01-01T${heHoraInicio}`)
-    const fin = new Date(`2000-01-01T${heHoraFin}`)
-    const horas = (fin.getTime() - inicio.getTime()) / (1000 * 60 * 60)
-    
+ async function registrarHoraExtra() {
+  if(!heFecha || !heHoraInicio || !heHoraFin) {
+    alert('Completa todos los campos')
+    return
+  }
+  
+  // Calcular horas
+  const inicio = new Date(`2000-01-01T${heHoraInicio}`)
+  const fin = new Date(`2000-01-01T${heHoraFin}`)
+  const horas = (fin.getTime() - inicio.getTime()) / (1000 * 60 * 60)
+  
+  // Determinar a quiénes aplicar
+  const personasARegistrar = hePersona === 'TODOS' 
+    ? personas 
+    : personas.filter(p => p.id === hePersona)
+  
+  // Registrar para cada persona
+  for (const persona of personasARegistrar) {
     await supabase.from('horas_extras').insert({
-      persona_id: hePersona,
+      persona_id: persona.id,
       fecha: heFecha,
       hora_inicio: heHoraInicio + ':00',
       hora_fin: heHoraFin + ':00',
       horas_solicitadas: horas,
       motivo: heMotivo,
-      aprobado: true,  // Se aprueba automáticamente
+      aprobado: true,
       aprobado_por: coordinador?.id
     })
-    
-    setModalHoraExtra(false)
-    setHePersona('')
-    setHeFecha('')
-    setHeHoraInicio('')
-    setHeHoraFin('')
-    setHeMotivo('')
-    alert('Hora extra registrada correctamente')
-    load()
   }
+  
+  setModalHoraExtra(false)
+  setHePersona('')
+  setHeFecha('')
+  setHeHoraInicio('')
+  setHeHoraFin('')
+  setHeMotivo('')
+  alert(`Hora extra registrada para ${personasARegistrar.length} persona(s)`)
+  load()
+}
 
   async function aprobarPermiso(id: string, estado: string) {
     await supabase.from('permisos').update({
@@ -434,12 +442,13 @@ export default function DashboardLogisticoPage() {
             
             <div style={{marginBottom:12}}>
               <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Persona</label>
-              <select value={hePersona} onChange={e=>setHePersona(e.target.value)} style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}}>
-                <option value="">Seleccionar...</option>
-                {personas.map(p => (
-                  <option key={p.id} value={p.id}>{p.nombre}</option>
-                ))}
-              </select>
+             <select value={hePersona} onChange={e=>setHePersona(e.target.value)} style={{width:'100%',padding:8,border:'1px solid #e2e8f0',borderRadius:6}}>
+  <option value="">Seleccionar...</option>
+  <option value="TODOS">👥 Todas las personas</option>
+  {personas.map(p => (
+    <option key={p.id} value={p.id}>{p.nombre}</option>
+  ))}
+</select>
             </div>
             
             <div style={{marginBottom:12}}>
