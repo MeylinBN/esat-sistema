@@ -478,19 +478,19 @@ export default function DashboardLogisticoPage() {
                 <input type="date" value={teFecha} onChange={e=>setTeFecha(e.target.value)} style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6}} />
               </div>
               <div>
-                <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Minutos de Gracia</label>
-                <input type="number" value={flexMinutos} onChange={e=>setFlexMinutos(e.target.value)} placeholder="15" style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6}} />
+                <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Hora Inicio</label>
+                <input type="time" value={teHoraInicio} onChange={e=>setTeHoraInicio(e.target.value)} style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6}} />
               </div>
             </div>
             
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
               <div>
-                <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Hora Inicio</label>
-                <input type="time" value={teHoraInicio} onChange={e=>setTeHoraInicio(e.target.value)} style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6}} />
-              </div>
-              <div>
                 <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Hora Fin</label>
                 <input type="time" value={teHoraFin} onChange={e=>setTeHoraFin(e.target.value)} style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6}} />
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,color:'#475569',display:'block',marginBottom:4}}>Minutos de Gracia</label>
+                <input type="number" value={flexMinutos} onChange={e=>setFlexMinutos(e.target.value)} placeholder="15" style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:6}} />
               </div>
             </div>
             
@@ -501,7 +501,7 @@ export default function DashboardLogisticoPage() {
             
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <button onClick={()=>setModalTiempoExtra(false)} style={{padding:'8px 16px',borderRadius:6,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontWeight:600}}>Cancelar</button>
-              <button onClick={registrarTiempoExtra} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#7c3aed',color:'white',cursor:'pointer',fontWeight:600'}}>Registrar para {tePersonas.length} persona{tePersonas.length!==1?'s':''}</button>
+              <button onClick={registrarTiempoExtra} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#7c3aed',color:'white',cursor:'pointer',fontWeight:600}}>Registrar para {tePersonas.length} persona{tePersonas.length!==1?'s':''}</button>
             </div>
           </div>
         </div>
@@ -615,7 +615,7 @@ export default function DashboardLogisticoPage() {
             
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <button onClick={()=>setModalFlex(false)} style={{padding:'8px 16px',borderRadius:6,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontWeight:600}}>Cancelar</button>
-              <button onClick={guardarFlexibilidad} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#3b82f6',color:'white',cursor:'pointer',fontWeight:600'}}>Registrar para {flexPersonas.length} persona{flexPersonas.length!==1?'s':''}</button>
+              <button onClick={guardarFlexibilidad} style={{padding:'8px 20px',borderRadius:6,border:'none',background:'#3b82f6',color:'white',cursor:'pointer',fontWeight:600}}>Registrar para {flexPersonas.length} persona{flexPersonas.length!==1?'s':''}</button>
             </div>
           </div>
         </div>
