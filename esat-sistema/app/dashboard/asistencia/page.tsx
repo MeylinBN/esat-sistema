@@ -41,6 +41,8 @@ export default function AsistenciaPage() {
   const [asistencias, setAsistencias] = useState<any[]>([])
   const [horarios, setHorarios]       = useState<any[]>([])
   const [tareas, setTareas]           = useState<any[]>([])
+  const [flexibilidadHoy, setFlexibilidadHoy] = useState<any[]>([])
+  const [tiempoExtraHoy, setTiempoExtraHoy] = useState<any[]>([])
   const [loading, setLoading]         = useState(true)
   const [modal, setModal]             = useState(false)
   const [mPerId, setMPerId]           = useState('')
@@ -57,16 +59,22 @@ export default function AsistenciaPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [p,a,h,t] = await Promise.all([
+    const [p,a,h,t,flex,te] = await Promise.all([
       supabase.from('personas').select('*').eq('activo',true).order('nombre'),
       supabase.from('asistencias').select('*').eq('fecha',hoy),
       supabase.from('horarios').select('*'),
       supabase.from('tareas').select('persona_id,estado'),
+      // Cargar flexibilidad de hoy
+      supabase.from('flexibilidad_horaria').select('*').eq('fecha',hoy),
+      // Cargar tiempo extra de hoy
+      supabase.from('horas_extras').select('*').eq('fecha',hoy).eq('aprobado',true),
     ])
     setPersonas(p.data??[])
     setAsistencias(a.data??[])
     setHorarios(h.data??[])
     setTareas(t.data??[])
+    setFlexibilidadHoy(flex.data??[])
+    setTiempoExtraHoy(te.data??[])
     setLoading(false)
   },[hoy])
 
@@ -75,62 +83,78 @@ export default function AsistenciaPage() {
   function getA(pid:string){return asistencias.find(a=>a.persona_id===pid)}
   function getHoy(pid:string){return horarios.filter(h=>h.persona_id===pid&&h.dia===diaKey)}
   function tareasActivas(pid:string){return tareas.filter(t=>t.persona_id===pid&&t.estado==='en_progreso').length}
+  
+  // ✅ NUEVA FUNCIÓN: Verificar si tiene flexibilidad hoy
+  function getFlexibilidad(pid:string){
+    return flexibilidadHoy.find(f => f.persona_id === pid)
+  }
+  
+  // ✅ NUEVA FUNCIÓN: Verificar si tiene tiempo extra hoy
+  function tieneTiempoExtra(pid:string){
+    return tiempoExtraHoy.some(te => te.persona_id === pid)
+  }
 
   async function guardar(){
-  if(!mPerId){return}
-  setSaving(true)
-  
-  // ✅ CORRECCIÓN: Usar mHora (el estado) para crear la hora completa
-  const horaCompleta = mHora+':00'
-  
-  const asist = getA(mPerId)
-  const persona = personas.find(p=>p.id===mPerId)
-  
-  let tard=0
-  if(persona?.hora_ingreso&&mTipo==='entrada' && !esRecuperacion){
-    const [hE,mE]=persona.hora_ingreso.split(':').map(Number)
-    const [hR,mR]=mHora.split(':').map(Number)  // ← mHora, no hora
-    tard=Math.max(0,(hR*60+mR)-(hE*60+mE)-(persona.tolerancia??10))
-  }
-  
-  if(!asist){
-    const estado = mEstado!=='presente' ? mEstado : (esRecuperacion ? 'presente' : tard>0?'tarde':'presente')
-    await supabase.from('asistencias').insert({
-      persona_id:mPerId,fecha:hoy,
-      hora_entrada:mTipo==='entrada'?horaCompleta:null,  // ← horaCompleta
-      hora_salida:mTipo==='salida'?horaCompleta:null,    // ← horaCompleta
-      hora_recuperacion: esRecuperacion ? horaCompleta : null,  // ← horaCompleta
-      recuperacion_motivo: esRecuperacion ? motivoRecuperacion : null,
-      recuperacion_aprobada: esRecuperacion ? false : null,
-      estado,tardanza_min:tard,observacion:mObs||null
-    })
-  } else {
-    const upd:any={observacion:mObs||asist.observacion}
-    if(mTipo==='entrada'){
-      upd.hora_entrada=horaCompleta  // ← horaCompleta
-      if(esRecuperacion){
-        upd.hora_recuperacion = horaCompleta  // ← horaCompleta
-        upd.recuperacion_motivo = motivoRecuperacion
-        upd.recuperacion_aprobada = false
-      }
-      if(tard>0)upd.estado='tarde'
-    } else {
-      upd.hora_salida=horaCompleta  // ← horaCompleta
-      if(esRecuperacion){
-        upd.hora_recuperacion = horaCompleta  // ← horaCompleta
-        upd.recuperacion_motivo = motivoRecuperacion
-      }
+    if(!mPerId){return}
+    setSaving(true)
+    
+    const horaCompleta = mHora+':00'
+    const asist = getA(mPerId)
+    const persona = personas.find(p=>p.id===mPerId)
+    
+    // ✅ Obtener flexibilidad si existe
+    const flex = getFlexibilidad(mPerId)
+    const minutosGracia = flex?.minutos_gracia || 0
+    
+    let tard=0
+    if(persona?.hora_ingreso&&mTipo==='entrada' && !esRecuperacion){
+      const [hE,mE]=persona.hora_ingreso.split(':').map(Number)
+      const [hR,mR]=mHora.split(':').map(Number)
+      // ✅ Sumar tolerancia + minutos de gracia de flexibilidad
+      const toleranciaTotal = (persona.tolerancia??10) + minutosGracia
+      tard=Math.max(0,(hR*60+mR)-(hE*60+mE)-toleranciaTotal)
     }
-    await supabase.from('asistencias').update(upd).eq('id',asist.id)
+    
+    if(!asist){
+      const estado = mEstado!=='presente' ? mEstado : (esRecuperacion ? 'presente' : tard>0?'tarde':'presente')
+      await supabase.from('asistencias').insert({
+        persona_id:mPerId,fecha:hoy,
+        hora_entrada:mTipo==='entrada'?horaCompleta:null,
+        hora_salida:mTipo==='salida'?horaCompleta:null,
+        hora_recuperacion: esRecuperacion ? horaCompleta : null,
+        recuperacion_motivo: esRecuperacion ? motivoRecuperacion : null,
+        recuperacion_aprobada: esRecuperacion ? false : null,
+        estado,tardanza_min:tard,observacion:mObs||null
+      })
+    } else {
+      const upd:any={observacion:mObs||asist.observacion}
+      if(mTipo==='entrada'){
+        upd.hora_entrada=horaCompleta
+        if(esRecuperacion){
+          upd.hora_recuperacion = horaCompleta
+          upd.recuperacion_motivo = motivoRecuperacion
+          upd.recuperacion_aprobada = false
+        }
+        if(tard>0)upd.estado='tarde'
+      } else {
+        upd.hora_salida=horaCompleta
+        if(esRecuperacion){
+          upd.hora_recuperacion = horaCompleta
+          upd.recuperacion_motivo = motivoRecuperacion
+        }
+      }
+      await supabase.from('asistencias').update(upd).eq('id',asist.id)
+    }
+    setModal(false);setMObs('');setEsRecuperacion(false);setMotivoRecuperacion('');setSaving(false);load()
   }
-  setModal(false);setMObs('');setEsRecuperacion(false);setMotivoRecuperacion('');setSaving(false);load()
-}
 
   const esat  = personas.filter(p=>p.grupo==='ESAT')
   const eco   = personas.filter(p=>p.grupo==='EcoBIOTEM')
   const total = esat.length
   const presentes = asistencias.filter(a=>['presente','tarde'].includes(a.estado)).length
   const tardanzas = asistencias.filter(a=>a.estado==='tarde').length
+  const conFlexibilidad = flexibilidadHoy.length
+  const conTiempoExtra = tiempoExtraHoy.length
 
   if(loading) return <div style={{padding:40,textAlign:'center',color:'#94a3b8'}}>Cargando asistencia...</div>
 
@@ -156,7 +180,7 @@ export default function AsistenciaPage() {
           {l:'Total equipo',v:total,s:'ESAT activos',c:'#002F6C',i:'👥'},
           {l:'Presentes hoy',v:presentes,s:`${total>0?Math.round(presentes/total*100):0}% asistencia`,c:'#15803d',i:'✅'},
           {l:'Tardanzas',v:tardanzas,s:'llegaron tarde',c:'#d97706',i:'⏰'},
-          {l:'Ausentes',v:total-presentes,s:'sin registrar o ausentes',c:'#dc2626',i:'⚠️'},
+          {l:'Flexibilidad/TE',v:conFlexibilidad+conTiempoExtra,s:`${conFlexibilidad} flex · ${conTiempoExtra} TE`,c:'#7c3aed',i:'🕐'},
         ].map(m=>(
           <div key={m.l} style={{background:'white',borderRadius:12,padding:'16px 18px',border:`1.5px solid ${m.c}22`,boxShadow:'0 1px 3px rgba(0,0,0,.06)',position:'relative',overflow:'hidden'}}>
             <div style={{fontSize:10,fontWeight:600,color:'#94a3b8',textTransform:'uppercase',marginBottom:6}}>{m.l}</div>
@@ -193,6 +217,8 @@ export default function AsistenciaPage() {
                     const franjas = getHoy(p.id)
                     const turno = turnoLabel(franjas)
                     const tAct = tareasActivas(p.id)
+                    const tieneFlex = getFlexibilidad(p.id)
+                    const tieneTE = tieneTiempoExtra(p.id)
 
                     return (
                       <div key={p.id} onClick={()=>{setMPerId(p.id);setModal(true)}}
@@ -208,6 +234,12 @@ export default function AsistenciaPage() {
                           <div style={{width:38,height:38,borderRadius:'50%',background:p.color,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:14,color:'white',flexShrink:0,position:'relative'}}>
                             {p.nombre.charAt(0)}
                             <div style={{position:'absolute',inset:-2,borderRadius:'50%',border:`2px solid ${cfg.border}`}}/>
+                            {/* Indicador de flexibilidad o tiempo extra */}
+                            {(tieneFlex || tieneTE) && (
+                              <div style={{position:'absolute',top:-2,right:-2,width:12,height:12,borderRadius:'50%',background:'#7c3aed',border:'2px solid white',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                                <span style={{fontSize:8,color:'white'}}>🕐</span>
+                              </div>
+                            )}
                           </div>
                           
                           <div style={{flex:1,minWidth:0}}>
@@ -215,6 +247,13 @@ export default function AsistenciaPage() {
                             <div style={{fontSize:9,color:'#94a3b8',marginTop:1}}>
                               {p.rol==='SENATI'?`Prac. SENATI · ${p.subrol}`:p.rol==='Practicante'?`Prac. UNASAM · ${p.subrol}`:p.rol}
                             </div>
+                            {/* Badge de flexibilidad/TE */}
+                            {(tieneFlex || tieneTE) && (
+                              <div style={{fontSize:9,color:'#7c3aed',marginTop:2,fontWeight:600}}>
+                                {tieneFlex && `🕐 +${tieneFlex.minutos_gracia}min`}
+                                {tieneTE && ' ⏱ TE'}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -271,7 +310,7 @@ export default function AsistenciaPage() {
             <table style={{width:'100%',borderCollapse:'collapse'}}>
               <thead>
                 <tr style={{background:'#f8fafc'}}>
-                  {['Nombre','Horario hoy','Entrada','Salida','Estado','Tardanza','Obs.'].map(h=>(
+                  {['Nombre','Horario hoy','Entrada','Salida','Estado','Tardanza','Flex/TE','Obs.'].map(h=>(
                     <th key={h} style={{padding:'12px',textAlign:'left',fontSize:11,fontWeight:600,color:'#64748b',textTransform:'uppercase',letterSpacing:'.06em'}}>{h}</th>
                   ))}
                 </tr>
@@ -281,6 +320,8 @@ export default function AsistenciaPage() {
                   const a=getA(p.id)
                   const cfg=ESTADO_CFG[a?.estado??'sin_registrar']??ESTADO_CFG.sin_registrar
                   const franjas=getHoy(p.id)
+                  const flex = getFlexibilidad(p.id)
+                  const te = tieneTiempoExtra(p.id)
                   return (
                     <tr key={p.id} style={{background:i%2===0?'white':'#f8fafc',borderBottom:'1px solid #f1f5f9'}}>
                       <td style={{padding:'10px 12px'}}>
@@ -299,6 +340,11 @@ export default function AsistenciaPage() {
                         <span style={{padding:'3px 9px',borderRadius:20,fontSize:10,fontWeight:700,background:cfg.pill,color:cfg.ptxt}}>{cfg.label}</span>
                       </td>
                       <td style={{padding:'10px 12px',fontSize:11,color:'#ea580c',fontWeight:600}}>{a?.tardanza_min>0?`+${a.tardanza_min} min`:'—'}</td>
+                      <td style={{padding:'10px 12px',fontSize:11}}>
+                        {flex && <span style={{color:'#7c3aed',fontWeight:600}}>{flex.minutos_gracia}min</span>}
+                        {te && <span style={{color:'#7c3aed',fontWeight:600,marginLeft:4}}>TE</span>}
+                        {!flex && !te && '—'}
+                      </td>
                       <td style={{padding:'10px 12px',fontSize:11,color:'#94a3b8'}}>{a?.observacion??'—'}</td>
                     </tr>
                   )
@@ -409,7 +455,7 @@ export default function AsistenciaPage() {
             
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <button onClick={()=>setModal(false)} style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>Cancelar</button>
-              <button onClick={guardar} disabled={saving||!mPerId} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mPerId||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mPerId||saving)?.6:1}}>
+              <button onClick={guardar} disabled={saving||!mPerId} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mPerId||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mPerId||saving)?0.6:1}}>
                 {saving?'Guardando...':'Confirmar'}
               </button>
             </div>
