@@ -85,12 +85,16 @@ export default function MiPanelPage() {
     setLoading(false)
   }
 
-  function getHorarioHoy(){
-    const diaSemana = format(new Date(),'E').toLowerCase().slice(0,1)
-    const mapeoDias: Record<string,string> = {m:'L',t:'M',w:'X',t:'J',f:'V',s:'S',s:'D'}
+ function getHorarioHoy(){
+    // new Date().getDay() devuelve: 0=Domingo, 1=Lunes, 2=Martes... 6=Sábado
+    const diaSemana = new Date().getDay()
+    
+    // Mapeo directo usando el número del día
+    const mapeoDias: Record<number,string> = {0:'D', 1:'L', 2:'M', 3:'X', 4:'J', 5:'V', 6:'S'}
+    
     const diaKey = mapeoDias[diaSemana] || 'L'
     return horarios.filter(h=>h.dia===diaKey)
-  }
+}
 
   function getHoraEntradaEsperada(){
     const franjas = getHorarioHoy()
