@@ -67,10 +67,10 @@ export default function MiPanelPage() {
     const [h,a,t,av,am,flex,te,perm] = await Promise.all([
       supabase.from('horarios').select('*').eq('persona_id',p.id),
       supabase.from('asistencias').select('*').eq('persona_id',p.id).eq('fecha',hoy).maybeSingle(),
-      supabase.from('tareas').select('*').eq('persona_id',p.id).neq('estado','cancelada').neq('estado','completada').order('created_at',{ascending:false}),
+     supabase.from('tareas').select('*').eq('persona_id',p.id).in('estado', ['pendiente', 'en_progreso']).order('created_at',{ascending:false}),
       supabase.from('avances_semanales').select('*').order('semana',{ascending:false}),
       supabase.from('asistencias').select('*').eq('persona_id',p.id).gte('fecha',mesIni).lte('fecha',mesFin),
-      supabase.from('flexibilidad_horaria').select('*, personas(nombre)').eq('persona_id',p.id).eq('fecha',hoy).maybeSingle(),
+      supabase.from('flexibilidad_horaria').select('*, autorizado_por:personas(nombre)').eq('persona_id',p.id).eq('fecha',hoy).maybeSingle(),
       supabase.from('horas_extras').select('*').eq('persona_id',p.id).eq('fecha',hoy).eq('aprobado',true).maybeSingle(),
       supabase.from('permisos').select('*').eq('persona_id',p.id).eq('dia_recuperacion',hoy).eq('recuperacion_aprobada',true).maybeSingle(),
     ])
@@ -376,7 +376,7 @@ export default function MiPanelPage() {
           </div>
           <div style={{fontSize:12,color:'#1e3a8a',background:'white',padding:'10px',borderRadius:8,border:'1px solid #93c5fd'}}>
             <strong>Motivo:</strong> {flexibilidadHoy.motivo}<br/>
-            <strong>Autorizado por:</strong> {flexibilidadHoy.personas?.nombre || 'Coordinador'}
+           <strong>Autorizado por:</strong> {flexibilidadHoy.autorizado_por?.nombre || 'Coordinador'}
           </div>
         </div>
       )}
@@ -431,7 +431,11 @@ export default function MiPanelPage() {
               fontFamily:'inherit',fontWeight:700,fontSize:14,opacity:registrando?0.7:1,transition:'all .2s'}}>
             <div style={{fontSize:22,marginBottom:4}}>{asistHoy?.hora_salida?'🚪':''}</div>
             <div>Marcar Salida</div>
-            <div style={{fontSize:11,fontWeight:400,opacity:.8,marginTop:2}}>{asistHoy?.hora_salida?`Registrada: ${asistHoy.hora_salida.slice(0,5)}`:horaSalidaEsperada?`Hasta ${horaSalidaEsperada}`:'Sin entrada'}</div>
+            <div style={{fontSize:11,opacity:.8,marginTop:2}}>
+  {asistHoy?.hora_salida 
+    ? `Registrada: ${asistHoy.hora_salida.slice(0,5)}` 
+    : 'Registrar salida'}
+</div>
           </button>
         </div>
 
