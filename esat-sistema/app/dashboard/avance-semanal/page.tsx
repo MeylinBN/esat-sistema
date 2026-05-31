@@ -4,7 +4,6 @@ import { createClient } from '@/lib/supabase/client'
 import { format, addDays, subDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 
-// Inicio del año operativo: Semana 1 = 12 de Enero
 const DIA_INICIO_SEMANA_1 = 12
 
 function getSemanaInfo(fecha: Date) {
@@ -54,15 +53,6 @@ function formatSemanaLabel(semanaKey: string, fechaRegistro?: string) {
     }
 }
 
-const ESTADO_CFG: Record<string,{bg:string,txt:string,label:string,border:string}> = {
-  asignado:            {bg:'#e0f2fe',txt:'#0369a1',label:'📋 Asignado', border:'#bae6fd'},
-  en_progreso:         {bg:'#dbeafe',txt:'#1d4ed8',label:'⚙️ En progreso', border:'#93c5fd'},
-  pendiente_revision:  {bg:'#fef3c7',txt:'#b45309',label:'👁 Pendiente revisión', border:'#fcd34d'},
-  subsanacion:         {bg:'#fce7f3',txt:'#be185d',label:'🔧 Subsanación', border:'#f9a8d4'},
-  completada:          {bg:'#dcfce7',txt:'#15803d',label:'✅ Completada', border:'#86efac'},
-  cancelada:           {bg:'#f1f5f9',txt:'#64748b',label:'❌ Cancelada', border:'#cbd5e1'},
-}
-
 export default function AvanceSemanalPage() {
   const supabase = createClient()
   const [personas, setPersonas] = useState<any[]>([])
@@ -75,8 +65,6 @@ export default function AvanceSemanalPage() {
   const [mTarea, setMTarea] = useState<any>(null)
   const [mPct, setMPct] = useState(0)
   const [mSem, setMSem] = useState('')
-  const [mEstado, setMEstado] = useState('')
-  const [mComentario, setMComentario] = useState('')
   const [saving, setSaving] = useState(false)
   
   const [seccionesDesplegadas, setSeccionesDesplegadas] = useState<Record<string, boolean>>({})
@@ -99,24 +87,21 @@ export default function AvanceSemanalPage() {
   }
 
   async function guardar(){
-    if(!mTarea||!mSem) return
+    if(!mTarea||!mSem) {
+      alert('Selecciona una semana')
+      return
+    }
     setSaving(true)
     try {
         await supabase.from('avances_semanales').upsert(
           {tarea_id:mTarea.id,semana:mSem,porcentaje:mPct},
           {onConflict:'tarea_id,semana'}
         )
-        // Si se cambió el estado en el modal, actualizarlo
-        if(mEstado && mEstado !== mTarea.estado) {
-          const updateData: any = {estado: mEstado}
-          if(mEstado === 'subsanacion' && mComentario) {
-            updateData.comentario_subsanacion = mComentario
-          }
-          await supabase.from('tareas').update(updateData).eq('id', mTarea.id)
-        }
         if(mPct>=100) await supabase.from('tareas').update({estado:'completada'}).eq('id',mTarea.id)
+        alert('✅ Avance registrado correctamente')
     } catch (error) {
         console.error('Error guardando:', error)
+        alert('❌ Error al guardar: ' + error)
     } finally {
         setModalAv(false);setSaving(false);load()
     }
@@ -188,7 +173,6 @@ export default function AvanceSemanalPage() {
           
           return (
             <div key={p.id} style={{background:'white',borderRadius:14,border:'1.5px solid #e2e8f0',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.06)'}}>
-              {/* Header persona */}
               <div style={{padding:'14px 20px',borderBottom:'1px solid #e2e8f0',background:'#f8fafc',display:'flex',alignItems:'center',gap:12}}>
                 <div style={{width:38,height:38,borderRadius:'50%',background:p.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:'white'}}>{p.nombre.charAt(0)}</div>
                 <div style={{flex:1}}>
@@ -204,27 +188,7 @@ export default function AvanceSemanalPage() {
               </div>
 
               <div style={{padding:'16px 20px'}}>
-                {/* ASIGNADAS */}
-                {stats.asignadas > 0 && (
-                  <div style={{marginBottom:16}}>
-                    <button onClick={()=>toggleSeccion(p.id,'asignado')} style={{width:'100%',padding:'10px',background:'#e0f2fe',border:'none',borderRadius:8,fontSize:12,fontWeight:600,color:'#0369a1',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                      <span>📋 Asignadas ({stats.asignadas})</span>
-                      <span>{seccionesDesplegadas[`${p.id}-asignado`]?'▲':'▼'}</span>
-                    </button>
-                    {seccionesDesplegadas[`${p.id}-asignado`] && (
-                      <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
-                        {tpers.filter(t=>t.estado==='asignado').map(t=>(
-                          <div key={t.id} style={{padding:'10px',background:'#f0f9ff',borderRadius:8,border:'1px solid #bae6fd'}}>
-                            <div style={{fontSize:12,fontWeight:600}}>{t.titulo}</div>
-                            {t.fecha_limite && <div style={{fontSize:10,color:'#64748b',marginTop:2}}>📅 {format(new Date(t.fecha_limite+'T12:00:00'),"d MMM",{locale:es})}</div>}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {/* EN PROGRESO */}
+                {/* EN PROGRESO - CON HISTORIAL SECUENCIAL */}
                 {stats.en_progreso > 0 && (
                   <div style={{marginBottom:16}}>
                     <button onClick={()=>toggleSeccion(p.id,'en_progreso')} style={{width:'100%',padding:'10px',background:'#dbeafe',border:'none',borderRadius:8,fontSize:12,fontWeight:600,color:'#1d4ed8',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -232,45 +196,46 @@ export default function AvanceSemanalPage() {
                       <span>{seccionesDesplegadas[`${p.id}-en_progreso`]?'▲':'▼'}</span>
                     </button>
                     {seccionesDesplegadas[`${p.id}-en_progreso`] && (
-                      <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
+                      <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:12}}>
                         {tpers.filter(t=>t.estado==='en_progreso').map(t=>{
                           const avancesSemana = avancesPorSemana(t.id)
                           const ultimo = ultimoAv(t.id)
                           return (
-                            <div key={t.id} style={{padding:'10px',background:'#eff6ff',borderRadius:8,border:'1px solid #bfdbfe'}}>
-                              <div style={{fontSize:12,fontWeight:600}}>{t.titulo}</div>
-                              {ultimo && <div style={{fontSize:10,color:'#1d4ed8',marginTop:2}}>{ultimo.porcentaje}% · {formatSemanaLabel(ultimo.semana, ultimo.created_at)}</div>}
-                              <button onClick={()=>{setMTarea(t);setMPct(ultimo?.porcentaje??0);setMSem('');setMEstado(t.estado);setMComentario('');setModalAv(true)}} 
-                                style={{marginTop:6,padding:'4px 8px',background:'#dbeafe',color:'#1d4ed8',border:'1px solid #93c5fd',borderRadius:6,fontSize:10,cursor:'pointer',fontWeight:600}}>
-                                + Registrar avance
-                              </button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {/* PENDIENTE REVISIÓN */}
-                {stats.pendiente_revision > 0 && (
-                  <div style={{marginBottom:16}}>
-                    <button onClick={()=>toggleSeccion(p.id,'pendiente_revision')} style={{width:'100%',padding:'10px',background:'#fef3c7',border:'none',borderRadius:8,fontSize:12,fontWeight:600,color:'#b45309',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                      <span>👁 Pendiente revisión ({stats.pendiente_revision})</span>
-                      <span>{seccionesDesplegadas[`${p.id}-pendiente_revision`]?'▲':'▼'}</span>
-                    </button>
-                    {seccionesDesplegadas[`${p.id}-pendiente_revision`] && (
-                      <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
-                        {tpers.filter(t=>t.estado==='pendiente_revision').map(t=>{
-                          const ultimo = ultimoAv(t.id)
-                          return (
-                            <div key={t.id} style={{padding:'10px',background:'#fffbeb',borderRadius:8,border:'1px solid #fcd34d'}}>
-                              <div style={{fontSize:12,fontWeight:600}}>{t.titulo}</div>
-                              {ultimo && <div style={{fontSize:10,color:'#b45309',marginTop:2}}>{ultimo.porcentaje}% · {formatSemanaLabel(ultimo.semana, ultimo.created_at)}</div>}
-                              <button onClick={()=>{setMTarea(t);setMPct(ultimo?.porcentaje??0);setMSem('');setMEstado(t.estado);setMComentario('');setModalAv(true)}} 
-                                style={{marginTop:6,padding:'4px 8px',background:'#fef3c7',color:'#b45309',border:'1px solid #fcd34d',borderRadius:6,fontSize:10,cursor:'pointer',fontWeight:600}}>
-                                + Registrar avance / Revisar
-                              </button>
+                            <div key={t.id} style={{padding:'14px',background:'#f8fafc',borderRadius:10,border:'1px solid #e2e8f0'}}>
+                              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
+                                <span style={{fontSize:13,fontWeight:700,color:'#0f172a'}}>{t.titulo}</span>
+                                <button onClick={()=>{setMTarea(t);setMPct(ultimo?.porcentaje??0);setMSem('');setModalAv(true)}}
+                                  style={{background:'#dbeafe',color:'#1d4ed8',border:'1px solid #93c5fd',borderRadius:7,padding:'5px 12px',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+                                  + Registrar Avance
+                                </button>
+                              </div>
+                              
+                              {avancesSemana.length > 0 ? (
+                                <div>
+                                  <div style={{fontSize:10,fontWeight:600,color:'#64748b',marginBottom:8,textTransform:'uppercase'}}>📊 Historial de Avances</div>
+                                  <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                                    {avancesSemana.map((av,idx)=>(
+                                      <div key={idx} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',background:'white',borderRadius:8,border:'1px solid #e2e8f0'}}>
+                                        <div style={{flex:1}}>
+                                          <div style={{fontSize:11,fontWeight:600,color:'#002F6C'}}>
+                                            {formatSemanaLabel(av.semana, av.created_at)}
+                                          </div>
+                                        </div>
+                                        <div style={{display:'flex',alignItems:'center',gap:8}}>
+                                          <div style={{width:100,height:6,background:'#e2e8f0',borderRadius:10,overflow:'hidden'}}>
+                                            <div style={{height:'100%',width:`${av.porcentaje}%`,background:av.porcentaje>=100?'#15803d':'#2563C8',borderRadius:10}}/>
+                                          </div>
+                                          <span style={{fontSize:12,fontWeight:700,color:av.porcentaje>=100?'#15803d':'#002F6C',minWidth:40,textAlign:'right'}}>{av.porcentaje}%</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{padding:'12px',background:'white',borderRadius:8,border:'1px dashed #cbd5e1',textAlign:'center',color:'#94a3b8',fontSize:12}}>
+                                  Sin avances registrados aún
+                                </div>
+                              )}
                             </div>
                           )
                         })}
@@ -289,16 +254,10 @@ export default function AvanceSemanalPage() {
                     {seccionesDesplegadas[`${p.id}-subsanacion`] && (
                       <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:6}}>
                         {tpers.filter(t=>t.estado==='subsanacion').map(t=>{
-                          const ultimo = ultimoAv(t.id)
                           return (
                             <div key={t.id} style={{padding:'10px',background:'#fdf2f8',borderRadius:8,border:'1px solid #f9a8d4'}}>
                               <div style={{fontSize:12,fontWeight:600}}>{t.titulo}</div>
                               {t.comentario_subsanacion && <div style={{fontSize:10,color:'#be185d',marginTop:2,fontStyle:'italic'}}>"{t.comentario_subsanacion}"</div>}
-                              {ultimo && <div style={{fontSize:10,color:'#be185d',marginTop:2}}>{ultimo.porcentaje}% · {formatSemanaLabel(ultimo.semana, ultimo.created_at)}</div>}
-                              <button onClick={()=>{setMTarea(t);setMPct(ultimo?.porcentaje??0);setMSem('');setMEstado(t.estado);setMComentario(t.comentario_subsanacion||'');setModalAv(true)}} 
-                                style={{marginTop:6,padding:'4px 8px',background:'#fce7f3',color:'#be185d',border:'1px solid #f9a8d4',borderRadius:6,fontSize:10,cursor:'pointer',fontWeight:600}}>
-                                + Corregir y enviar
-                              </button>
                             </div>
                           )
                         })}
@@ -345,17 +304,16 @@ export default function AvanceSemanalPage() {
         )}
       </div>
 
-      {/* Modal avance - ACTUALIZADO */}
+      {/* Modal avance - SIMPLIFICADO Y FUNCIONAL */}
       {modalAv&&mTarea&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>{if(e.target===e.currentTarget)setModalAv(false)}}>
-          <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:480,boxShadow:'0 24px 80px rgba(0,0,0,.25)'}}>
+          <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:450,boxShadow:'0 24px 80px rgba(0,0,0,.25)'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
               <h3 style={{fontSize:16,fontWeight:700,margin:0}}>Registrar avance</h3>
               <button onClick={()=>setModalAv(false)} style={{width:28,height:28,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
             </div>
             <div style={{marginBottom:14,padding:'10px 14px',background:'#eff6ff',borderRadius:9,fontSize:13,fontWeight:600,color:'#002F6C',border:'1px solid #bfdbfe'}}>{mTarea.titulo}</div>
             
-            {/* Selector de semanas */}
             <div style={{marginBottom:12}}>
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Semana *</label>
               <select 
@@ -372,35 +330,6 @@ export default function AvanceSemanalPage() {
               </select>
             </div>
             
-            {/* Selector de estado */}
-            <div style={{marginBottom:12}}>
-              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Estado de la tarea</label>
-              <select 
-                value={mEstado} 
-                onChange={e=>setMEstado(e.target.value)}
-                style={{width:'100%',padding:'10px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13,outline:'none'}}
-              >
-                {Object.entries(ESTADO_CFG).map(([k,v])=>(
-                  <option key={k} value={k}>{v.label}</option>
-                ))}
-              </select>
-            </div>
-            
-            {/* Comentario para subsanación */}
-            {mEstado === 'subsanacion' && (
-              <div style={{marginBottom:12}}>
-                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#be185d',marginBottom:5,textTransform:'uppercase'}}>Comentario de corrección</label>
-                <textarea 
-                  value={mComentario} 
-                  onChange={e=>setMComentario(e.target.value)}
-                  rows={2}
-                  placeholder="Indica qué debe corregir el estudiante..."
-                  style={{width:'100%',padding:'10px 12px',border:'1.5px solid #f9a8d4',borderRadius:9,fontFamily:'inherit',fontSize:13,resize:'vertical'}}
-                />
-              </div>
-            )}
-            
-            {/* Porcentaje de avance */}
             <div style={{marginBottom:8}}>
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Avance: {mPct}%</label>
               <input type="range" min={0} max={100} step={5} value={mPct} onChange={e=>setMPct(+e.target.value)} style={{width:'100%',accentColor:'#002F6C'}}/>
@@ -409,7 +338,6 @@ export default function AvanceSemanalPage() {
               <div style={{height:'100%',width:`${mPct}%`,background:mPct>=100?'#15803d':'#2563C8',borderRadius:10,transition:'width .3s'}}/>
             </div>
             {mPct>=100&&<p style={{fontSize:12,color:'#15803d',fontWeight:600,textAlign:'center',marginBottom:12}}>✓ Se marcará como completada</p>}
-            
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <button onClick={()=>setModalAv(false)} style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>Cancelar</button>
               <button onClick={guardar} disabled={saving||!mSem} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mSem||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mSem||saving)?0.6:1}}>{saving?'Guardando...':'Guardar'}</button>
