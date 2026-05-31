@@ -38,10 +38,11 @@ const ESTADO_CFG: Record<string,{bg:string,border:string,pill:string,ptxt:string
 export default function AsistenciaPage() {
   const supabase = createClient()
   const hoy = format(new Date(),'yyyy-MM-dd')
-  const diaSemana = getDay(new Date()) // 0=Domingo, 1=Lunes, ..., 6=Sábado
+  const diaSemana = getDay(new Date())
   const diaKey = DIAS[diaSemana]
   const esFinDeSemana = diaSemana === 0 || diaSemana === 6
 
+  const [currentUser, setCurrentUser] = useState<any>(null)
   const [personas, setPersonas]       = useState<any[]>([])
   const [asistencias, setAsistencias] = useState<any[]>([])
   const [horarios, setHorarios]       = useState<any[]>([])
@@ -60,14 +61,29 @@ export default function AsistenciaPage() {
   const [verLista, setVerLista]       = useState(false)
   const [mostrarAlertaFinSemana, setMostrarAlertaFinSemana] = useState(false)
   
-  // Estados para recuperación de horas
   const [esRecuperacion, setEsRecuperacion] = useState(false)
   const [motivoRecuperacion, setMotivoRecuperacion] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    // Obtener grupo del usuario actual
+    let grupoDelUsuario = 'ESAT' // default
+    if (user) {
+      const { data: userData } = await supabase
+        .from('personas')
+        .select('grupo')
+        .eq('auth_id', user.id)
+        .single()
+      if (userData?.grupo) {
+        grupoDelUsuario = userData.grupo
+        setCurrentUser(userData)
+      }
+    }
+    
     const [p,a,h,t,flex,te] = await Promise.all([
-      supabase.from('personas').select('*').eq('activo',true).order('nombre'),
+      supabase.from('personas').select('*').eq('activo',true).eq('grupo', grupoDelUsuario).order('nombre'),
       supabase.from('asistencias').select('*').eq('fecha',hoy),
       supabase.from('horarios').select('*'),
       supabase.from('tareas').select('persona_id,estado'),
@@ -100,7 +116,6 @@ export default function AsistenciaPage() {
   async function guardar(){
     if(!mPerId){return}
     
-    // ✅ Validar fin de semana
     if(esFinDeSemana && !mObs.toLowerCase().includes('fin de semana') && !esRecuperacion) {
       if(!confirm(`⚠️ Hoy es ${DIAS_COMPLETOS[diaSemana]}. ¿Estás seguro de registrar asistencia en fin de semana?`)) {
         return
@@ -158,9 +173,10 @@ export default function AsistenciaPage() {
     setModal(false);setMObs('');setEsRecuperacion(false);setMotivoRecuperacion('');setSaving(false);load()
   }
 
-  const esat  = personas.filter(p=>p.grupo==='ESAT')
-  const eco   = personas.filter(p=>p.grupo==='EcoBIOTEM')
-  const total = esat.length
+  // ✅ CORRECCIÓN: Filtrar por grupo del usuario logueado
+  const grupoDelUsuario = currentUser?.grupo || 'ESAT'
+  const personasDelGrupo = personas.filter(p => p.grupo === grupoDelUsuario && p.activo === true)
+  const total = personasDelGrupo.length
   const presentes = asistencias.filter(a=>['presente','tarde'].includes(a.estado)).length
   const tardanzas = asistencias.filter(a=>a.estado==='tarde').length
   const conFlexibilidad = flexibilidadHoy.length
@@ -175,7 +191,7 @@ export default function AsistenciaPage() {
         <div>
           <h1 style={{fontFamily:'Lora,serif',fontSize:24,color:'#002F6C',fontWeight:600}}>Control de asistencia</h1>
           <p style={{fontSize:12,color:'#475569',marginTop:3,textTransform:'capitalize'}}>
-            {format(new Date(),"EEEE d 'de' mmm 'de' yyyy",{locale:es})}
+            {format(new Date(),"EEEE d 'de' MMMM 'del' yyyy",{locale:es})}
             {esFinDeSemana && <span style={{marginLeft:8,color:'#dc2626',fontWeight:600}}>⚠️ Fin de semana</span>}
           </p>
         </div>
@@ -211,7 +227,7 @@ export default function AsistenciaPage() {
       {/* Métricas */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14,marginBottom:20}}>
         {[
-          {l:'Total equipo',v:total,s:'ESAT activos',c:'#002F6C',i:'👥'},
+          {l:'Total equipo',v:total,s:`${grupoDelUsuario} activos`,c:'#002F6C',i:'👥'},
           {l:'Presentes hoy',v:presentes,s:`${total>0?Math.round(presentes/total*100):0}% asistencia`,c:'#15803d',i:'✅'},
           {l:'Tardanzas',v:tardanzas,s:'llegaron tarde',c:'#d97706',i:'⏰'},
           {l:'Flexibilidad/TE',v:conFlexibilidad+conTiempoExtra,s:`${conFlexibilidad} flex · ${conTiempoExtra} TE`,c:'#7c3aed',i:'🕐'},
@@ -228,7 +244,8 @@ export default function AsistenciaPage() {
       {!verLista ? (
         <>
           {GRUPOS.map(grupo=>{
-            const gpersonas = esat.filter(p=>p.rol===grupo.key)
+            // ✅ CORRECCIÓN: Filtrar por grupo del usuario
+            const gpersonas = personasDelGrupo.filter(p=>p.rol===grupo.key)
             if(!gpersonas.length) return null
             const gpresentes = gpersonas.filter(p=>['presente','tarde'].includes(getA(p.id)?.estado??'')).length
             return (
@@ -319,13 +336,14 @@ export default function AsistenciaPage() {
             )
           })}
 
-          {eco.length>0&&(
+          {/* Mostrar EcoBIOTEM solo si el usuario es de EcoBIOTEM */}
+          {grupoDelUsuario === 'EcoBIOTEM' && personasDelGrupo.length>0 && (
             <div style={{background:'white',borderRadius:14,border:'2px solid #86efac',marginBottom:24,padding:20}}>
               <div style={{fontSize:14,fontWeight:600,color:'#0f172a',marginBottom:12,display:'flex',alignItems:'center',gap:8}}>
                 <div style={{width:8,height:8,borderRadius:'50%',background:'#15803d'}}/>🌿 GI EcoBIOTEM — Horario flexible
               </div>
               <p style={{fontSize:13,color:'#475569',lineHeight:1.7,margin:0}}>
-                Los miembros del GI EcoBIOTEM <strong>no tienen horario fijo</strong>. Registran horas desde su panel personal. <strong>{eco.length} miembros activos.</strong>
+                Los miembros del GI EcoBIOTEM <strong>no tienen horario fijo</strong>. Registran horas desde su panel personal. <strong>{personasDelGrupo.length} miembros activos.</strong>
               </p>
             </div>
           )}
@@ -346,7 +364,8 @@ export default function AsistenciaPage() {
                 </tr>
               </thead>
               <tbody>
-                {esat.map((p,i)=>{
+                {/* ✅ CORRECCIÓN: Mapear personasDelGrupo en lugar de esat */}
+                {personasDelGrupo.map((p,i)=>{
                   const a=getA(p.id)
                   const cfg=ESTADO_CFG[a?.estado??'sin_registrar']??ESTADO_CFG.sin_registrar
                   const franjas=getHoy(p.id)
@@ -394,7 +413,6 @@ export default function AsistenciaPage() {
               <button onClick={()=>setModal(false)} style={{width:28,height:28,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
             </div>
             
-            {/* Alerta fin de semana en modal */}
             {esFinDeSemana && (
               <div style={{background:'#fef3c7',border:'1.5px solid #f59e0b',borderRadius:9,padding:'12px',marginBottom:16,display:'flex',alignItems:'center',gap:8}}>
                 <span style={{fontSize:18}}>⚠️</span>
@@ -408,7 +426,8 @@ export default function AsistenciaPage() {
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Persona</label>
               <select value={mPerId} onChange={e=>setMPerId(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
                 <option value="">Seleccionar...</option>
-                {personas.map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}
+                {/* ✅ CORRECCIÓN: Mapear personasDelGrupo */}
+                {personasDelGrupo.map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select>
             </div>
             
@@ -448,7 +467,6 @@ export default function AsistenciaPage() {
               </div>
             </div>
 
-            {/* ✅ NUEVO: Toggle hora automática vs manual */}
             <div style={{marginBottom:12}}>
               <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:10}}>
                 <input 
@@ -477,7 +495,6 @@ export default function AsistenciaPage() {
               )}
             </div>
 
-            {/* Checkbox de recuperación */}
             <div style={{marginBottom:12}}>
               <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
                 <input 

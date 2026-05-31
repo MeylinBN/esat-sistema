@@ -37,66 +37,63 @@ export default function DashboardLogisticoPage() {
 
   useEffect(() => { load() }, [])
 
-  async function load() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+ async function load() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
 
-    const { data: coordData } = await supabase
-      .from('personas')
+  const { data: coordData } = await supabase
+    .from('personas')
+    .select('*')
+    .eq('auth_id', user.id)
+    .single()
+
+  setCoordinador(coordData)
+
+  // ✅ CORRECCIÓN: Cada coordinador ve a su propio grupo
+  const grupoAsignado = coordData?.grupo || 'ESAT'
+  
+  // ✅ CORRECCIÓN: Filtrar por grupo del coordinador
+  const [p, ah, perm, tar, te, flex] = await Promise.all([
+    supabase.from('personas')
       .select('*')
-      .eq('auth_id', user.id)
-      .single()
+      .eq('activo', true)
+      .eq('grupo', grupoAsignado)  // ← Solo personas de SU grupo
+      .order('nombre'),
+    supabase.from('asistencias')
+      .select('*')
+      .eq('fecha', hoy),
+    supabase.from('permisos')
+      .select('*, personas(nombre,color,rol)')
+      .eq('estado', 'pendiente')
+      .order('created_at', { ascending: false })
+      .limit(5),
+    supabase.from('tareas')
+      .select('*, personas(nombre,color)')
+      .neq('estado', 'cancelada')
+      .order('created_at', { ascending: false })
+      .limit(10),
+    supabase.from('horas_extras')
+      .select('*, personas(nombre,color,rol)')
+      .eq('fecha', hoy)
+      .eq('aprobado', true)
+      .order('created_at', { ascending: false }),
+    supabase.from('flexibilidad_horaria')
+      .select('*, personas(nombre)')
+      .eq('fecha', hoy)
+      .order('created_at', { ascending: false }),
+  ])
 
-    setCoordinador(coordData)
+  const personasIds = p.data?.map(x => x.id) || []
+  const asistFiltrada = ah.data?.filter(a => personasIds.includes(a.persona_id)) || []
 
-    const esFrancisco = coordData?.dni === '70189681'
-    const grupoAsignado = esFrancisco ? 'EcoBIOTEM' : 'ESAT'
-    const rolFiltro = esFrancisco ? 'EcoBIOTEM' : ['Practicante', 'SENATI', 'Voluntario', 'Asistente']
-
-    const [p, ah, perm, tar, te, flex] = await Promise.all([
-      supabase.from('personas')
-        .select('*')
-        .eq('activo', true)
-        .in('rol', Array.isArray(rolFiltro) ? rolFiltro : [rolFiltro])
-        .eq('grupo', grupoAsignado)
-        .order('nombre'),
-      supabase.from('asistencias')
-        .select('*')
-        .eq('fecha', hoy),
-      supabase.from('permisos')
-        .select('*, personas(nombre,color,rol)')
-        .eq('estado', 'pendiente')
-        .order('created_at', { ascending: false })
-        .limit(5),
-      supabase.from('tareas')
-        .select('*, personas(nombre,color)')
-        .neq('estado', 'cancelada')
-        .order('created_at', { ascending: false })
-        .limit(10),
-      // Tiempo extra - SOLO HOY
-      supabase.from('horas_extras')
-        .select('*, personas(nombre,color,rol)')
-        .eq('fecha', hoy)
-        .eq('aprobado', true)
-        .order('created_at', { ascending: false }),
-      // Flexibilidad horaria - SOLO HOY
-      supabase.from('flexibilidad_horaria')
-        .select('*, personas(nombre)')
-        .eq('fecha', hoy)
-        .order('created_at', { ascending: false }),
-    ])
-
-    const personasIds = p.data?.map(x => x.id) || []
-    const asistFiltrada = ah.data?.filter(a => personasIds.includes(a.persona_id)) || []
-
-    setPersonas(p.data ?? [])
-    setAsistHoy(asistFiltrada)
-    setPermisos(perm.data ?? [])
-    setTareas(tar.data ?? [])
-    setTiempoExtra(te.data ?? [])
-    setFlexibilidadHoy(flex.data ?? [])
-    setLoading(false)
-  }
+  setPersonas(p.data ?? [])
+  setAsistHoy(asistFiltrada)
+  setPermisos(perm.data ?? [])
+  setTareas(tar.data ?? [])
+  setTiempoExtra(te.data ?? [])
+  setFlexibilidadHoy(flex.data ?? [])
+  setLoading(false)
+}
 
   async function registrarTiempoExtra() {
     if (tePersonas.length === 0 || !teFecha || !teHoraInicio || !teHoraFin) {
