@@ -175,7 +175,7 @@ export default function AsistenciaPage() {
         <div>
           <h1 style={{fontFamily:'Lora,serif',fontSize:24,color:'#002F6C',fontWeight:600}}>Control de asistencia</h1>
           <p style={{fontSize:12,color:'#475569',marginTop:3,textTransform:'capitalize'}}>
-            {format(new Date(),"EEEE d 'de' MMMM 'del' yyyy",{locale:es})}
+            {format(new Date(),"EEEE d 'de' mmm 'de' yyyy",{locale:es})}
             {esFinDeSemana && <span style={{marginLeft:8,color:'#dc2626',fontWeight:600}}>⚠️ Fin de semana</span>}
           </p>
         </div>

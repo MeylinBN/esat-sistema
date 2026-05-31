@@ -247,13 +247,11 @@ function getHoraSalidaEsperada(){
 
   async function guardarAvance(){
   if(!mTarea||!mSem) return
-  setSaving(true)
-  
+  setSaving(true)  
   await supabase.from('avances_semanales').upsert(
     {tarea_id:mTarea.id,semana:mSem,porcentaje:mPct},
     {onConflict:'tarea_id,semana'}
   )
-  
   // ✅ Si llega a 100%, FORZAR estado a completada
   if(mPct >= 100) {
     await supabase.from('tareas').update({

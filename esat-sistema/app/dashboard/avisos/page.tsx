@@ -1,15 +1,13 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { format, isSameDay, parseISO } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 const TIPO_CFG: Record<string,{bg:string,txt:string,border:string,label:string}> = {
-  permiso:      {bg:'#f3e8ff',txt:'#7c3aed',border:'#a855f7',label:'PERMISO'},
-  anuncio:      {bg:'#dcfce7',txt:'#15803d',border:'#86efac',label:'ANUNCIO'},
-  urgente:      {bg:'#fee2e2',txt:'#b91c1c',border:'#fca5a5',label:'URGENTE'},
-  horario:      {bg:'#dbeafe',txt:'#1d4ed8',border:'#93c5fd',label:'HORARIO'},
-  recordatorio: {bg:'#fef3c7',txt:'#b45309',border:'#fde68a',label:'RECORDATORIO'},
+  anuncio:  {bg:'#dcfce7',txt:'#15803d',border:'#86efac',label:'ANUNCIO'},
+  permiso:  {bg:'#f3e8ff',txt:'#7c3aed',border:'#a855f7',label:'PERMISO'},
+  reunion:  {bg:'#fef3c7',txt:'#b45309',border:'#fde68a',label:'REUNIÓN'},
 }
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -40,7 +38,13 @@ export default function AvisosPage() {
   async function guardar(){
     if(!mTitulo) return
     setSaving(true)
-    await supabase.from('avisos').insert({tipo:mTipo,titulo:mTitulo,descripcion:mDesc,destinatario:mDest,fecha_evento:mFecha||null,urgente:mTipo==='urgente'})
+    await supabase.from('avisos').insert({
+      tipo:mTipo,
+      titulo:mTitulo,
+      descripcion:mDesc,
+      destinatario:mDest,
+      fecha_evento:mFecha||null
+    })
     setModal(false);setMTitulo('');setMDesc('');setMFecha('');setSaving(false);load()
   }
 
@@ -51,14 +55,12 @@ export default function AvisosPage() {
   }
 
   // Tabs y Filtros
-  const TABS = ['Todos', 'Anuncios', 'Permisos', 'Horarios', 'Recordatorios', 'Urgentes']
+  const TABS = ['Todos', 'Anuncios', 'Permisos', 'Reuniones']
   const filtrados = avisos.filter(a => {
     if (filtro === 'Todos') return true
     if (filtro === 'Anuncios') return a.tipo === 'anuncio'
     if (filtro === 'Permisos') return a.tipo === 'permiso'
-    if (filtro === 'Horarios') return a.tipo === 'horario'
-    if (filtro === 'Recordatorios') return a.tipo === 'recordatorio'
-    if (filtro === 'Urgentes') return a.urgente || a.tipo === 'urgente'
+    if (filtro === 'Reuniones') return a.tipo === 'reunion'
     return true
   })
 
@@ -76,11 +78,9 @@ export default function AvisosPage() {
 
   // Etiquetas para agrupación
   const tipoLabels: Record<string,string> = {
-    urgente: '🔴 URGENTES',
     anuncio: '📢 ANUNCIOS',
     permiso: '📋 PERMISOS',
-    horario: '🕐 HORARIOS',
-    recordatorio: '⏰ RECORDATORIOS'
+    reunion: ' REUNIONES'
   }
 
   if(loading) return <div style={{padding:40,textAlign:'center',color:'#94a3b8'}}>Cargando avisos...</div>
@@ -90,7 +90,7 @@ export default function AvisosPage() {
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:22,flexWrap:'wrap',gap:12}}>
         <div>
           <h1 style={{fontFamily:'Lora,serif',fontSize:24,color:'#002F6C',fontWeight:600}}>Avisos y comunicados</h1>
-          <p style={{fontSize:12,color:'#475569',marginTop:3}}>Cambios de horario, permisos, anuncios generales</p>
+          <p style={{fontSize:12,color:'#475569',marginTop:3}}>Anuncios, permisos y reuniones del equipo</p>
         </div>
         <button className="btn btn-p" onClick={()=>setModal(true)}>+ Nuevo aviso</button>
       </div>
@@ -118,10 +118,8 @@ export default function AvisosPage() {
             {filtro === 'Todos' ? (
               /* AGRUPADO POR TIPOS */
               <>
-                {['urgente', 'anuncio', 'permiso', 'horario', 'recordatorio'].map(tipo => {
-                  const avisosTipo = filtrados.filter(a => 
-                    tipo === 'urgente' ? a.urgente : a.tipo === tipo
-                  )
+                {['anuncio', 'permiso', 'reunion'].map(tipo => {
+                  const avisosTipo = filtrados.filter(a => a.tipo === tipo)
                   if (avisosTipo.length === 0) return null
                   
                   return (
@@ -147,7 +145,6 @@ export default function AvisosPage() {
                                 <div style={{flex:1}}>
                                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
                                     <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:cfg.bg,color:cfg.txt}}>{cfg.label}</span>
-                                    {a.urgente&&<span style={{fontSize:10,fontWeight:700,color:'#b91c1c'}}>🔴 URGENTE</span>}
                                   </div>
                                   <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{a.titulo}</div>
                                   {a.descripcion&&<div style={{fontSize:12,color:'#475569',lineHeight:1.6,marginBottom:6}}>{a.descripcion}</div>}
@@ -177,7 +174,6 @@ export default function AvisosPage() {
                       <div style={{flex:1}}>
                         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
                           <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:cfg.bg,color:cfg.txt}}>{cfg.label}</span>
-                          {a.urgente&&<span style={{fontSize:10,fontWeight:700,color:'#b91c1c'}}>🔴 URGENTE</span>}
                         </div>
                         <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{a.titulo}</div>
                         {a.descripcion&&<div style={{fontSize:12,color:'#475569',lineHeight:1.6,marginBottom:6}}>{a.descripcion}</div>}
@@ -210,7 +206,7 @@ export default function AvisosPage() {
             
             {/* Leyenda */}
             <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap'}}>
-              {[['#dbeafe','Horario'],['#f3e8ff','Permiso'],['#fee2e2','Urgente'],['#dcfce7','Anuncio'],['#fef3c7','Recordatorio']].map(([c,l])=>(
+              {[['#dcfce7','Anuncio'],['#f3e8ff','Permiso'],['#fef3c7','Reunión']].map(([c,l])=>(
                 <div key={l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:'#475569'}}>
                   <div style={{width:10,height:10,borderRadius:2,background:c as string}}/>
                   {l}
@@ -249,8 +245,8 @@ export default function AvisosPage() {
                         {avisosD.slice(0,3).map((a,idx)=>(
                           <div key={idx} style={{
                             width:4,height:4,borderRadius:'50%',
-                            background:TIPO_CFG[a.tipo]?.bg??'#f3e8ff',
-                            border:`1px solid ${TIPO_CFG[a.tipo]?.txt??'#7c3aed'}`
+                            background:TIPO_CFG[a.tipo]?.bg??'#dcfce7',
+                            border:`1px solid ${TIPO_CFG[a.tipo]?.txt??'#15803d'}`
                           }}/>
                         ))}
                         {avisosD.length > 3 && (
@@ -262,7 +258,7 @@ export default function AvisosPage() {
                     {/* Fondo degradado si hay eventos */}
                     {avisosD.length > 0 && !esHoy && (
                       <div style={{position:'absolute',bottom:0,left:0,right:0,height:3,
-                        background:`linear-gradient(90deg, ${avisosD.map(a=>TIPO_CFG[a.tipo]?.bg??'#f3e8ff').join(', ')})`
+                        background:`linear-gradient(90deg, ${avisosD.map(a=>TIPO_CFG[a.tipo]?.bg??'#dcfce7').join(', ')})`
                       }}/>
                     )}
                   </div>
@@ -280,7 +276,11 @@ export default function AvisosPage() {
             <div className="ig" style={{marginBottom:12}}>
               <label>Tipo</label>
               <select value={mTipo} onChange={e=>setMTipo(e.target.value)}>
-                {Object.entries({anuncio:'Anuncio',permiso:'Permiso / Falta',horario:'Cambio de horario',recordatorio:'Recordatorio',urgente:'URGENTE'}).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+                {Object.entries({
+                  anuncio:'📢 Anuncio (cambios de horario, información general)',
+                  permiso:'📋 Permiso / Falta',
+                  reunion:'👥 Reunión'
+                }).map(([k,v])=><option key={k} value={k}>{v}</option>)}
               </select>
             </div>
             <div className="ig" style={{marginBottom:12}}>
