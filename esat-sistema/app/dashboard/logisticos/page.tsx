@@ -253,59 +253,114 @@ export default function DashboardLogisticoPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
 
-        {/* Estado del equipo hoy */}
-        <div style={{ background: 'white', borderRadius: 14, border: '1.5px solid #e2e8f0', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#15803d' }} />
-            Estado del equipo hoy
+       {/* Estado del equipo hoy - VERSIÓN MEJORADA */}
+<div style={{ background: 'white', borderRadius: 14, border: '1.5px solid #e2e8f0', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
+  <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#15803d' }} />
+    Estado del equipo hoy
+  </div>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 380, overflowY: 'auto' }}>
+    {personas.map(p => {
+      const a = asistHoy.find(x => x.persona_id === p.id)
+      const tieneFlexibilidad = flexibilidadHoy.find(f => f.persona_id === p.id)
+      
+      // Calcular hora esperada de entrada
+      const horaIngreso = p.hora_ingreso || '08:30'
+      const [hEsp, mEsp] = horaIngreso.split(':').map(Number)
+      const minutosEsperados = hEsp * 60 + mEsp
+      
+      // Calcular minutos de gracia si tiene flexibilidad
+      const minutosGracia = tieneFlexibilidad?.minutos_gracia || 0
+      const tolerancia = p.tolerancia || 10
+      const margenTotal = minutosGracia + tolerancia
+      
+      // Hora actual
+      const ahora = new Date()
+      const minutosActuales = ahora.getHours() * 60 + ahora.getMinutes()
+      
+      // Determinar estado visual
+      let estadoVisual = 'sin_registrar'
+      let colorHora = '#94a3b8'
+      let textoEstado = '—'
+      
+      if (a?.hora_entrada) {
+        // Ya registró entrada
+        const [hEnt, mEnt] = a.hora_entrada.split(':').map(Number)
+        const minutosEntrada = hEnt * 60 + mEnt
+        const tardanza = minutosEntrada - minutosEsperados - margenTotal
+        
+        if (tardanza > 0) {
+          colorHora = '#d97706' // Naranja - Tarde
+          textoEstado = `${a.hora_entrada.slice(0,5)} (+${Math.floor(tardanza)}min)`
+        } else {
+          colorHora = '#15803d' // Verde - Puntual
+          textoEstado = a.hora_entrada.slice(0,5)
+        }
+      } else {
+        // Aún no registra entrada
+        const minutosTarde = minutosActuales - minutosEsperados - margenTotal
+        
+        if (minutosTarde > 15) {
+          // Ya pasó más de 15 minutos de su hora → ROJO (Ausente)
+          colorHora = '#dc2626'
+          textoEstado = 'AUSENTE'
+        } else if (minutosTarde > 0) {
+          // Ya pasó su hora pero menos de 15 min → NARANJA (Esperando)
+          colorHora = '#d97706'
+          textoEstado = `${minutosTarde}min tarde`
+        } else {
+          // Aún es temprano → GRIS
+          colorHora = '#94a3b8'
+          textoEstado = '—'
+        }
+      }
+      
+      return (
+        <div key={p.id} style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 12px', borderRadius: 10,
+          background: colorHora === '#dc2626' ? '#fef2f2' : 
+                     colorHora === '#d97706' ? '#fff7ed' : 
+                     colorHora === '#15803d' ? '#f0fdf4' : '#f8fafc',
+          border: `1.5px solid ${colorHora}40`
+        }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: '50%', background: p.color,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, fontWeight: 700, color: 'white', flexShrink: 0,
+            border: `2px solid ${colorHora}`,
+            boxShadow: colorHora !== '#94a3b8' ? `0 0 0 3px ${colorHora}20` : 'none'
+          }}>
+            {p.nombre.charAt(0)}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 380, overflowY: 'auto' }}>
-            {personas.map(p => {
-              const a = asistHoy.find(x => x.persona_id === p.id)
-              const estado = a?.estado ?? 'sin_registrar'
-              const tieneFlexibilidad = flexibilidadHoy.some(f => f.persona_id === p.id)
-              const COLOR: Record<string, string> = {
-                presente: '#15803d', tarde: '#d97706', ausente: '#dc2626',
-                permiso: '#7c3aed', sin_registrar: '#94a3b8'
-              }
-              return (
-                <div key={p.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '8px 10px', borderRadius: 9, background: '#f8fafc',
-                  border: '1px solid #e2e8f0'
-                }}>
-                  <div style={{
-                    width: 32, height: 32, borderRadius: '50%', background: p.color,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 700, color: 'white', flexShrink: 0
-                  }}>
-                    {p.nombre.charAt(0)}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {p.nombre}
-                      {tieneFlexibilidad && <span style={{ marginLeft: 4, fontSize: 10 }}></span>}
-                    </div>
-                    <div style={{ fontSize: 10, color: '#94a3b8' }}>
-                      {p.rol} · {p.area || p.subrol || '-'}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLOR[estado] }} />
-                    <span style={{ fontSize: 11, color: COLOR[estado], fontWeight: 500 }}>
-                      {a?.hora_entrada?.slice(0, 5) ?? '—'}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-            {!personas.length && (
-              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 13 }}>
-                No hay personal asignado
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {p.nombre}
+            </div>
+            <div style={{ fontSize: 10, color: '#94a3b8' }}>
+              {p.rol} · {p.area || p.subrol || '-'}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: colorHora }}>
+              {textoEstado}
+            </div>
+            {tieneFlexibilidad && (
+              <div style={{ fontSize: 9, color: '#7c3aed', fontWeight: 600 }}>
+                +{tieneFlexibilidad.minutos_gracia}min gracia
               </div>
             )}
           </div>
         </div>
+      )
+    })}
+    {!personas.length && (
+      <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 13 }}>
+        No hay personal asignado
+      </div>
+    )}
+  </div>
+</div>
 
         {/* Permisos pendientes */}
         <div style={{ background: 'white', borderRadius: 14, border: '1.5px solid #e2e8f0', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
