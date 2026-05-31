@@ -70,7 +70,10 @@ export default function MiPanelPage() {
      supabase.from('tareas').select('*').eq('persona_id',p.id).in('estado', ['pendiente', 'en_progreso']).order('created_at',{ascending:false}),
       supabase.from('avances_semanales').select('*').order('semana',{ascending:false}),
       supabase.from('asistencias').select('*').eq('persona_id',p.id).gte('fecha',mesIni).lte('fecha',mesFin),
-      supabase.from('flexibilidad_horaria').select('*, autorizado_por:personas(nombre)').eq('persona_id',p.id).eq('fecha',hoy).maybeSingle(),
+      supabase.from('flexibilidad_horaria').select(`
+  *,
+  coordinador:personas!flexibilidad_horaria_autorizado_por_fkey(nombre)
+`).eq('persona_id',p.id).eq('fecha',hoy).maybeSingle(),
       supabase.from('horas_extras').select('*').eq('persona_id',p.id).eq('fecha',hoy).eq('aprobado',true).maybeSingle(),
       supabase.from('permisos').select('*').eq('persona_id',p.id).eq('dia_recuperacion',hoy).eq('recuperacion_aprobada',true).maybeSingle(),
     ])
@@ -85,30 +88,30 @@ export default function MiPanelPage() {
     setLoading(false)
   }
 
- function getHorarioHoy(){
-    // new Date().getDay() devuelve: 0=Domingo, 1=Lunes, 2=Martes... 6=Sábado
-    const diaSemana = new Date().getDay()
-    
-    // Mapeo directo usando el número del día
-    const mapeoDias: Record<number,string> = {0:'D', 1:'L', 2:'M', 3:'X', 4:'J', 5:'V', 6:'S'}
-    
-    const diaKey = mapeoDias[diaSemana] || 'L'
-    return horarios.filter(h=>h.dia===diaKey)
+function getHorarioHoy(){
+  const diaSemana = new Date().getDay() // 0=Domingo, 1=Lunes... 6=Sábado
+  const mapeoDias: Record<number,string> = {0:'D', 1:'L', 2:'M', 3:'X', 4:'J', 5:'V', 6:'S'}
+  const diaKey = mapeoDias[diaSemana]
+  
+  const franjas = horarios.filter(h=>h.dia===diaKey)
+  
+  // Si no hay horario ese día (como sábado), retorna null
+  if(franjas.length === 0) return null
+  return franjas
 }
 
-  function getHoraEntradaEsperada(){
-    const franjas = getHorarioHoy()
-    if(franjas.length===0) return persona.hora_ingreso || '08:30'
-    return franjas[0].hora_entrada.slice(0,5)
-  }
+function getHoraEntradaEsperada(){
+  const franjas = getHorarioHoy()
+  if(!franjas || franjas.length===0) return null // Retorna null si no hay horario
+  return franjas[0].hora_entrada.slice(0,5)
+}
 
-  function getHoraSalidaEsperada(){
-    const franjas = getHorarioHoy()
-    if(franjas.length===0) return null
-    // Si tiene tiempo extra, usar la hora fin del tiempo extra
-    if(tiempoExtraHoy) return tiempoExtraHoy.hora_fin.slice(0,5)
-    return franjas[franjas.length-1].hora_salida.slice(0,5)
-  }
+function getHoraSalidaEsperada(){
+  const franjas = getHorarioHoy()
+  if(!franjas || franjas.length===0) return null
+  if(tiempoExtraHoy) return tiempoExtraHoy.hora_fin.slice(0,5)
+  return franjas[franjas.length-1].hora_salida.slice(0,5)
+}
 
   async function marcarEntrada(){
     if(!persona||registrando) return
@@ -243,15 +246,27 @@ export default function MiPanelPage() {
   }
 
   async function guardarAvance(){
-    if(!mTarea||!mSem) return
-    setSaving(true)
-    await supabase.from('avances_semanales').upsert(
-      {tarea_id:mTarea.id,semana:mSem,porcentaje:mPct},
-      {onConflict:'tarea_id,semana'}
-    )
-    if(mPct>=100) await supabase.from('tareas').update({estado:'completada'}).eq('id',mTarea.id)
-    setModalAv(false);setSaving(false);load()
+  if(!mTarea||!mSem) return
+  setSaving(true)
+  
+  await supabase.from('avances_semanales').upsert(
+    {tarea_id:mTarea.id,semana:mSem,porcentaje:mPct},
+    {onConflict:'tarea_id,semana'}
+  )
+  
+  // ✅ Si llega a 100%, FORZAR estado a completada
+  if(mPct >= 100) {
+    await supabase.from('tareas').update({
+      estado: 'completada'
+    }).eq('id', mTarea.id)
+    
+    // Recargar para que desaparezca de la vista
+    await load()
   }
+  
+  setModalAv(false)
+  setSaving(false)
+}
 
   const horasMes = asistMes.filter(a=>a.hora_entrada&&a.hora_salida).reduce((acc,a)=>{
     const [he,me]=a.hora_entrada.split(':').map(Number)
@@ -259,7 +274,7 @@ export default function MiPanelPage() {
     return acc+Math.max(0,((hs*60+ms)-(he*60+me))/60)
   },0)
   
-  const tareasActivas = tareas.filter(t=>t.estado==='en_progreso'||t.estado==='pendiente')
+  const tareasActivas = tareas.filter(t => t.estado === 'en_progreso' || t.estado === 'pendiente')
 
   const TIPO_PERMISO: Record<string,string> = {
     permiso_medico:'🏥 Médico',
@@ -376,7 +391,7 @@ export default function MiPanelPage() {
           </div>
           <div style={{fontSize:12,color:'#1e3a8a',background:'white',padding:'10px',borderRadius:8,border:'1px solid #93c5fd'}}>
             <strong>Motivo:</strong> {flexibilidadHoy.motivo}<br/>
-           <strong>Autorizado por:</strong> {flexibilidadHoy.autorizado_por?.nombre || 'Coordinador'}
+           <strong>Autorizado por:</strong> {flexibilidadHoy.coordinador?.nombre || 'Coordinador'}
           </div>
         </div>
       )}
@@ -390,6 +405,34 @@ export default function MiPanelPage() {
         </div>
         <div style={{fontSize:52,fontWeight:700,color:'#002F6C',letterSpacing:'-1px',marginBottom:4,fontVariantNumeric:'tabular-nums'}}>{tiempo}</div>
         <div style={{fontSize:13,color:'#94a3b8',marginBottom:18}}>Marca tu asistencia del día de hoy</div>
+
+
+
+{/* Solo muestra el horario si existe */}
+{horaEntradaEsperada && (
+  <div style={{padding:'10px 14px',background:'#f0f9ff',borderRadius:9,border:'1px solid #bae6fd',fontSize:12,color:'#0369a1',marginBottom:16}}>
+    <div style={{marginBottom:4}}><strong>Tu horario hoy:</strong></div>
+    <div>
+      Entrada: <strong>{horaEntradaEsperada}</strong>
+      {flexibilidadHoy && <span> (con {flexibilidadHoy.minutos_gracia}min)</span>}
+    </div>
+    {horaSalidaEsperada && (
+      <div>
+        Salida: <strong>{horaSalidaEsperada}</strong>
+        {tiempoExtraHoy && <span> (tiempo extra)</span>}
+      </div>
+    )}
+  </div>
+)}
+
+{/* Si no hay horario, muestra mensaje */}
+{!horaEntradaEsperada && (
+  <div style={{padding:'10px 14px',background:'#fef3c7',borderRadius:9,border:'1px solid #fcd34d',fontSize:12,color:'#92400e',marginBottom:16}}>
+    ⚠️ No tienes horario registrado para hoy ({format(new Date(),"EEEE",{locale:es})})
+  </div>
+)}
+
+
 
         {/* Horario esperado */}
 <div style={{padding:'10px 14px',background:'#f0f9ff',borderRadius:9,border:'1px solid #bae6fd',fontSize:12,color:'#0369a1',marginBottom:16}}>
@@ -515,7 +558,7 @@ export default function MiPanelPage() {
             <span style={{fontSize:11,fontWeight:400,color:'#94a3b8'}}>({tareasActivas.length} activas)</span>
           </div>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {tareas.map(t=>{
+           {tareas.filter(t => t.estado !== 'completada').map(t => {
               const ua=avances.find(a=>a.tarea_id===t.id)
               const PC: Record<string,string>={alta:'#fee2e2',media:'#fef3c7',baja:'#dcfce7'}
               const PT: Record<string,string>={alta:'#b91c1c',media:'#b45309',baja:'#15803d'}
