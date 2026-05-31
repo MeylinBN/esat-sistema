@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { format, addDays, subDays, startOfWeek } from 'date-fns'
+import { format, addDays, subDays, startOfWeek, getDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 // Inicio del año operativo: Semana 1 = 12 de Enero
@@ -32,7 +32,6 @@ function getSemanaInfo(fecha: Date) {
         }
     } catch (error) {
         console.error('Error calculando semana:', error)
-        // Valor por defecto seguro
         return {
             numSemana: 1,
             key: `${new Date().getFullYear()}-1`,
@@ -43,8 +42,8 @@ function getSemanaInfo(fecha: Date) {
     }
 }
 
-// Formatear etiqueta desde clave de BD (ej: "2026-20")
-function formatSemanaLabel(semanaKey: string) {
+// ✅ CORREGIDO: Formatear etiqueta desde clave de BD
+function formatSemanaLabel(semanaKey: string, fechaRegistro?: string) {
     try {
         if (!semanaKey || !semanaKey.includes('-')) return 'Semana no especificada'
         
@@ -61,7 +60,18 @@ function formatSemanaLabel(semanaKey: string) {
         const viernes = new Date(lunes)
         viernes.setDate(lunes.getDate() + 4)
         
-        return `Semana ${week} (${format(lunes, 'dd/MM')} - ${format(viernes, 'dd/MM')})`
+        // Calcular día si hay fecha de registro
+        let diaTexto = ''
+        if (fechaRegistro) {
+            const fechaReg = new Date(fechaRegistro)
+            const diffDays = Math.floor((fechaReg.getTime() - lunes.getTime()) / (1000 * 60 * 60 * 24))
+            const diaSemana = diffDays + 1 // Día 1 = lunes, Día 5 = viernes
+            if (diaSemana >= 1 && diaSemana <= 5) {
+                diaTexto = ` · día ${diaSemana}`
+            }
+        }
+        
+        return `Semana ${week} (${format(lunes, 'dd/MM')} - ${format(viernes, 'dd/MM')})${diaTexto}`
     } catch (error) {
         console.error('Error formateando semana:', semanaKey, error)
         return semanaKey || 'Semana desconocida'
@@ -231,7 +241,7 @@ export default function AvanceSemanalPage() {
                                   <div key={idx} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',background:'white',borderRadius:8,border:'1px solid #e2e8f0'}}>
                                     <div style={{flex:1}}>
                                       <div style={{fontSize:11,fontWeight:600,color:'#002F6C'}}>
-                                        {formatSemanaLabel(av.semana)}
+                                        {formatSemanaLabel(av.semana, av.created_at)}
                                       </div>
                                     </div>
                                     <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -267,7 +277,7 @@ export default function AvanceSemanalPage() {
                           <div key={t.id} style={{padding:'10px 12px',background:'#f0fdf4',borderRadius:9,border:'1px solid #86efac',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                             <span style={{fontSize:12,fontWeight:600,color:'#15803d'}}>{t.titulo}</span>
                             <span style={{fontSize:11,color:'#15803d',fontWeight:700}}>
-                                100% · {ua?.semana ? formatSemanaLabel(ua.semana) : '—'}
+                                100% · {ua?.semana ? formatSemanaLabel(ua.semana, ua.created_at) : '—'}
                             </span>
                           </div>
                         )
@@ -324,7 +334,7 @@ export default function AvanceSemanalPage() {
             {mPct>=100&&<p style={{fontSize:12,color:'#15803d',fontWeight:600,textAlign:'center',marginBottom:12}}>✓ Se marcará como completada</p>}
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <button onClick={()=>setModalAv(false)} style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>Cancelar</button>
-              <button onClick={guardar} disabled={saving||!mSem} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mSem||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mSem||saving)?.6:1}}>{saving?'Guardando...':'Guardar'}</button>
+              <button onClick={guardar} disabled={saving||!mSem} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mSem||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mSem||saving)?0.6:1}}>{saving?'Guardando...':'Guardar'}</button>
             </div>
           </div>
         </div>
