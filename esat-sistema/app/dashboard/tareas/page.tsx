@@ -117,17 +117,22 @@ export default function TareasPage() {
   function ultimoAvance(tid:string){return avancesTarea(tid)[0]}
 
   function generarSemanasDisponibles() {
-    const hoy = new Date()
-    const infoHoy = getSemanaInfo(hoy)
-    const semanas = []
-    const infoAnterior = getSemanaInfo(new Date(hoy.getTime() - 7 * 24 * 60 * 60 * 1000))
-    semanas.push({ ...infoAnterior, esAnterior: true, esActual: false })
-    for (let i = 0; i <= 4; i++) {
-      const fechaIteracion = new Date(infoHoy.lunes?.getTime() || hoy.getTime() + i * 7 * 24 * 60 * 60 * 1000)
-      semanas.push({ ...getSemanaInfo(fechaIteracion), esAnterior: false, esActual: i === 0 })
-    }
-    return semanas
+  const hoy = new Date()
+  const infoHoy = getSemanaInfo(hoy)
+  const semanas = []
+  
+  // Semana anterior
+  const infoAnterior = getSemanaInfo(new Date(hoy.getTime() - 7 * 24 * 60 * 60 * 1000))
+  semanas.push({ ...infoAnterior, esAnterior: true, esActual: false })
+  
+  // Actual + 4 próximas
+  for (let i = 0; i <= 4; i++) {
+    const fechaIteracion = new Date(hoy.getTime() + i * 7 * 24 * 60 * 60 * 1000)
+    semanas.push({ ...getSemanaInfo(fechaIteracion), esAnterior: false, esActual: i === 0 })
   }
+  
+  return semanas
+}
 
   async function cambiarEstado(id:string, estado:string){
     await supabase.from('tareas').update({estado}).eq('id',id)
