@@ -67,11 +67,11 @@ export default function DashboardLogisticoPage() {
       .eq('estado', 'pendiente')
       .order('created_at', { ascending: false })
       .limit(5),
-    supabase.from('tareas')
-      .select('*, personas(nombre,color)')
-      .neq('estado', 'cancelada')
-      .order('created_at', { ascending: false })
-      .limit(10),
+   supabase.from('tareas')
+  .select('*, personas(nombre,color)')
+  .in('estado', ['asignado', 'en_progreso', 'pendiente_revision', 'subsanacion'])
+  .order('created_at', { ascending: false })
+  .limit(10),
     supabase.from('horas_extras')
       .select('*, personas(nombre,color,rol)')
       .eq('fecha', hoy)
