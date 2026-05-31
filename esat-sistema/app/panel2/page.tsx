@@ -388,7 +388,7 @@ export default function MiPanelPage() {
         <div style={{fontSize:13,color:'#94a3b8',marginBottom:18}}>Marca tu asistencia del día de hoy</div>
 
         {/* Horario esperado */}
-        <div style={{padding:'10px 14px',background:'#f0f9ff',borderRadius:9,border:'1px solid #bae6fd',fontSize:12,color:'#0369a1',marginBottom:16}}>
+         <div style={{padding:'10px 14px',background:'#f0f9ff',borderRadius:9,border:'1px solid #bae6fd',fontSize:12,color:'#0369a1',marginBottom:16}}>
           <div style={{marginBottom:4}}><strong> Tu horario hoy:</strong></div>
           <div>Entrada: <strong>{horaEntradaEsperada}</strong> {flexibilidadHoy && `(con ${flexibilidadHoy.minutos_gracia}min de gracia)`}</div>
           {horaSalidaEsperada && <div>Salida: <strong>{horaSalidaEsperada}</strong> {tiempoExtraHoy && '(con tiempo extra aprobado)'}}</div>
