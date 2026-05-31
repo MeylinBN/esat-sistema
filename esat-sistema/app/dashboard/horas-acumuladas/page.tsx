@@ -48,12 +48,26 @@ async function loadGrupos(){
     }
   }
 
-  function calcularHorasDia(entrada: string, salida: string): number {
-    if (!entrada || !salida) return 0
-    const [hE, mE] = entrada.split(':').map(Number)
-    const [hS, mS] = salida.split(':').map(Number)
-    const minutos = (hS * 60 + mS) - (hE * 60 + mE)
-    return minutos > 0 ? minutos / 60 : 0
+  function calcularHorasDia(entrada1: string, salida1: string, entrada2?: string, salida2?: string): number {
+    let totalHoras = 0
+    
+    // Primer turno
+    if (entrada1 && salida1) {
+      const [hE1, mE1] = entrada1.split(':').map(Number)
+      const [hS1, mS1] = salida1.split(':').map(Number)
+      const minutos1 = (hS1 * 60 + mS1) - (hE1 * 60 + mE1)
+      if (minutos1 > 0) totalHoras += minutos1 / 60
+    }
+    
+    // Segundo turno (si existe)
+    if (entrada2 && salida2) {
+      const [hE2, mE2] = entrada2.split(':').map(Number)
+      const [hS2, mS2] = salida2.split(':').map(Number)
+      const minutos2 = (hS2 * 60 + mS2) - (hE2 * 60 + mE2)
+      if (minutos2 > 0) totalHoras += minutos2 / 60
+    }
+    
+    return totalHoras
   }
 
   function formatoHoras(horas: number): string {
@@ -85,15 +99,20 @@ async function loadGrupos(){
 
   // Calcular totales DINÁMICOS según el filtro
 const stats = {
-  totalPersonas: Object.keys(porPersona).length,
-  totalHoras: Object.values(porPersona).flat().reduce((acc: number, a: any) => 
-    acc + calcularHorasDia(a.hora_entrada?.slice(0,5), a.hora_salida?.slice(0,5)), 0
-  ),
-  porGrupo: gruposConfig.reduce((acc, grupo) => {
-    acc[grupo] = personas.filter(p => p.grupo === grupo && porPersona[p.id]).length
-    return acc
-  }, {} as Record<string, number>)
-}
+    totalPersonas: Object.keys(porPersona).length,
+    totalHoras: Object.values(porPersona).flat().reduce((acc: number, a: any) => 
+      acc + calcularHorasDia(
+        a.hora_entrada?.slice(0,5), 
+        a.hora_salida?.slice(0,5),
+        a.hora_entrada_2?.slice(0,5),  // ✅ Segundo turno
+        a.hora_salida_2?.slice(0,5)     // ✅ Segundo turno
+      ), 0
+    ),
+    porGrupo: gruposConfig.reduce((acc, grupo) => {
+      acc[grupo] = personas.filter(p => p.grupo === grupo && porPersona[p.id]).length
+      return acc
+    }, {} as Record<string, number>)
+  }
 
   if (loading) return <div style={{ padding:40, textAlign:'center', color:'#94a3b8' }}>Cargando horas acumuladas...</div>
 
@@ -179,7 +198,12 @@ const stats = {
           .map(p => {
             const asistenciasPersona = porPersona[p.id] || []
             const totalHorasPersona = asistenciasPersona.reduce((acc: number, a: any) => 
-              acc + calcularHorasDia(a.hora_entrada?.slice(0,5), a.hora_salida?.slice(0,5)), 0
+              acc + calcularHorasDia(
+                a.hora_entrada?.slice(0,5), 
+                a.hora_salida?.slice(0,5),
+                a.hora_entrada_2?.slice(0,5),
+                a.hora_salida_2?.slice(0,5)
+              ), 0
             )
 
             return (
@@ -187,7 +211,7 @@ const stats = {
                 background:'white', borderRadius:12, border:`2px solid ${p.grupo==='EcoBIOTEM'?'#166534':'#e2e8f0'}`, 
                 overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,.06)' 
               }}>
-                {/* Header persona */}
+                {/* Header persona - SE MANTIENE IGUAL */}
                 <div style={{ 
                   padding:'14px 20px', background: p.grupo==='EcoBIOTEM' ? '#f0fdf4' : '#f8fafc',
                   borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', gap:12 
@@ -213,15 +237,15 @@ const stats = {
                   </div>
                 </div>
 
-                {/* Tabla de días */}
+                {/* Tabla de días - ACTUALIZADA PARA DOBLE TURNO */}
                 <div style={{ padding:'12px 20px' }}>
                   <table style={{ width:'100%', fontSize:12 }}>
                     <thead>
                       <tr style={{ borderBottom:'1.5px solid #e2e8f0' }}>
                         <th style={{ padding:'8px', textAlign:'left', fontWeight:600, color:'#475569' }}>Fecha</th>
-                        <th style={{ padding:'8px', textAlign:'center', fontWeight:600, color:'#475569' }}>Entrada</th>
-                        <th style={{ padding:'8px', textAlign:'center', fontWeight:600, color:'#475569' }}>Salida</th>
-                        <th style={{ padding:'8px', textAlign:'center', fontWeight:600, color:'#475569' }}>Horas</th>
+                        <th style={{ padding:'8px', textAlign:'center', fontWeight:600, color:'#475569' }}>Turno Mañana</th>
+                        <th style={{ padding:'8px', textAlign:'center', fontWeight:600, color:'#475569' }}>Turno Tarde</th>
+                        <th style={{ padding:'8px', textAlign:'center', fontWeight:600, color:'#475569' }}>Total Horas</th>
                         <th style={{ padding:'8px', textAlign:'center', fontWeight:600, color:'#475569' }}>Estado</th>
                       </tr>
                     </thead>
@@ -229,20 +253,37 @@ const stats = {
                       {asistenciasPersona
                         .sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
                         .map((a, i) => {
-                          const horas = calcularHorasDia(a.hora_entrada?.slice(0,5), a.hora_salida?.slice(0,5))
+                          const horasTurno1 = calcularHorasDia(a.hora_entrada?.slice(0,5), a.hora_salida?.slice(0,5))
+                          const horasTurno2 = calcularHorasDia(a.hora_entrada_2?.slice(0,5), a.hora_salida_2?.slice(0,5))
+                          const horasTotales = horasTurno1 + horasTurno2
+                          
                           return (
                             <tr key={i} style={{ borderBottom:'1px solid #f1f5f9' }}>
                               <td style={{ padding:'8px', color:'#0f172a' }}>
                                 {format(parseISO(a.fecha), 'EEE d MMM', { locale: es })}
                               </td>
-                              <td style={{ padding:'8px', textAlign:'center', color:'#475569' }}>
-                                {a.hora_entrada?.slice(0,5) || '—'}
+                              <td style={{ padding:'8px', textAlign:'center' }}>
+                                {a.hora_entrada && a.hora_salida ? (
+                                  <div style={{ fontSize:11 }}>
+                                    <div style={{ color:'#475569' }}>{a.hora_entrada.slice(0,5)} - {a.hora_salida.slice(0,5)}</div>
+                                    <div style={{ color:'#002F6C', fontWeight:600 }}>{formatoHoras(horasTurno1)}</div>
+                                  </div>
+                                ) : (
+                                  <span style={{ color:'#94a3b8' }}>—</span>
+                                )}
                               </td>
-                              <td style={{ padding:'8px', textAlign:'center', color:'#475569' }}>
-                                {a.hora_salida?.slice(0,5) || '—'}
+                              <td style={{ padding:'8px', textAlign:'center' }}>
+                                {a.hora_entrada_2 && a.hora_salida_2 ? (
+                                  <div style={{ fontSize:11 }}>
+                                    <div style={{ color:'#475569' }}>{a.hora_entrada_2.slice(0,5)} - {a.hora_salida_2.slice(0,5)}</div>
+                                    <div style={{ color:'#002F6C', fontWeight:600 }}>{formatoHoras(horasTurno2)}</div>
+                                  </div>
+                                ) : (
+                                  <span style={{ color:'#94a3b8' }}>—</span>
+                                )}
                               </td>
-                              <td style={{ padding:'8px', textAlign:'center', fontWeight:600, color:'#002F6C' }}>
-                                {horas > 0 ? formatoHoras(horas) : '—'}
+                              <td style={{ padding:'8px', textAlign:'center', fontWeight:700, color:'#002F6C' }}>
+                                {horasTotales > 0 ? formatoHoras(horasTotales) : '—'}
                               </td>
                               <td style={{ padding:'8px', textAlign:'center' }}>
                                 <span style={{ 
