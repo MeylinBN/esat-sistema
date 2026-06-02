@@ -138,7 +138,7 @@ export default function MiPanelPage() {
       return
     }
     
-    const tardanzaMinutos = Math.max(0, minutosActuales - minutosEsperados - margenTotal)
+   const tardanzaMinutos = Math.max(0, minutosActuales - minutosEsperados)
     const estado = tardanzaMinutos > 0 ? 'tarde' : 'presente'
     const horaCompleta = horaActual+':00'
     

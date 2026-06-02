@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { format, getDay } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { useLocationCheck } from '@/app/lib/useLocationCheck'
 
 const DIAS: Record<number,string> = {1:'L',2:'M',3:'X',4:'J',5:'V',6:'S',0:'D'}
 const DIAS_COMPLETOS: Record<number,string> = {
@@ -41,7 +42,7 @@ export default function AsistenciaPage() {
   const diaSemana = getDay(new Date())
   const diaKey = DIAS[diaSemana]
   const esFinDeSemana = diaSemana === 0 || diaSemana === 6
-
+  const location = useLocationCheck()
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [personas, setPersonas]       = useState<any[]>([])
   const [asistencias, setAsistencias] = useState<any[]>([])
@@ -197,17 +198,97 @@ export default function AsistenciaPage() {
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           <button onClick={()=>setVerLista(!verLista)} style={{padding:'8px 16px',background:'white',border:'1.5px solid #e2e8f0',borderRadius:8,cursor:'pointer',fontWeight:600}}>{verLista?'Ver tarjetas':'Ver lista completa'}</button>
-          <button onClick={()=>{
-            if(esFinDeSemana) {
-              if(confirm('⚠️ Hoy es fin de semana. ¿Deseas registrar asistencia de todas formas?')) {
-                setMPerId('');setModal(true)
+          <button
+            onClick={() => {
+              if (!location.ipOk && !location.gpsOk) {
+                alert(location.mensaje)
+                return
               }
-            } else {
-              setMPerId('');setModal(true)
-            }
-          }} style={{padding:'8px 16px',background:'#002F6C',color:'white',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600}}>+ Registrar</button>
+              if (esFinDeSemana) {
+                if (confirm('⚠️ Hoy es fin de semana. ¿Deseas registrar asistencia de todas formas?')) {
+                  setMPerId(''); setModal(true)
+                }
+              } else {
+                setMPerId(''); setModal(true)
+              }
+            }}
+            disabled={location.checking}
+            style={{
+              padding: '8px 16px',
+              background: location.checking
+                ? '#94a3b8'
+                : location.status === 'authorized'
+                  ? '#002F6C'
+                  : '#dc2626',
+              color: 'white',
+              border: 'none',
+              borderRadius: 8,
+              cursor: location.checking ? 'wait' : 'pointer',
+              fontWeight: 600,
+              opacity: location.checking ? 0.7 : 1,
+              transition: 'background .3s',
+            }}
+          >
+            {location.checking
+              ? '⏳ Verificando...'
+              : location.status === 'authorized'
+                ? '+ Registrar'
+                : '🚫 Sin acceso'}
+          </button>
         </div>
       </div>
+
+ {/* Banner de verificación de ubicación */}
+ {!location.checking && (
+        <div style={{
+          background: location.status === 'authorized' ? '#f0fdf4' : '#fef2f2',
+          border: `1.5px solid ${location.status === 'authorized' ? '#86efac' : '#fca5a5'}`,
+          borderRadius: 10,
+          padding: '10px 16px',
+          marginBottom: 14,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>
+              {location.status === 'authorized' ? '🛰️' : '📡'}
+            </span>
+            <div>
+              <div style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: location.status === 'authorized' ? '#15803d' : '#b91c1c',
+              }}>
+                {location.mensaje}
+              </div>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+                {location.ipOk && '✓ Red ESAT '}
+                {location.gpsOk && `✓ GPS (${location.distanciaMetros}m)`}
+                {!location.ipOk && !location.gpsOk && 'Red y GPS fuera del campus'}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={location.recheck}
+            style={{
+              padding: '4px 10px',
+              fontSize: 11,
+              border: '1px solid #e2e8f0',
+              borderRadius: 6,
+              background: 'white',
+              cursor: 'pointer',
+              fontWeight: 600,
+              color: '#475569',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            🔄 Reverificar
+          </button>
+        </div>
+      )}
+
 
       {/* Alerta fin de semana */}
       {esFinDeSemana && (
@@ -272,7 +353,14 @@ export default function AsistenciaPage() {
                     const tieneTE = tieneTiempoExtra(p.id)
 
                     return (
-                      <div key={p.id} onClick={()=>{setMPerId(p.id);setModal(true)}}
+                      <div key={p.id}onClick={() => {
+              if (!location.ipOk && !location.gpsOk) {
+                alert(location.mensaje)
+                return
+              }
+              setMPerId(p.id)
+              setModal(true)
+            }}
                         style={{background:cfg.bg,border:`1.5px solid ${cfg.border}`,borderRadius:12,padding:14,cursor:'pointer',transition:'all .2s',position:'relative'}}
                         onMouseEnter={e=>(e.currentTarget as any).style.boxShadow='0 4px 16px rgba(0,0,0,.1)'}
                         onMouseLeave={e=>(e.currentTarget as any).style.boxShadow=''}>
