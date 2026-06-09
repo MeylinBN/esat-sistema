@@ -1,4 +1,5 @@
 'use client'
+import { useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -10,6 +11,32 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+   const searchParams = useSearchParams()
+  const reason = searchParams.get('reason')
+
+  return (
+    <div style={{maxWidth:400, margin:'100px auto', padding:20}}>
+      {reason === 'timeout' && (
+        <div style={{
+          padding: '12px 16px',
+          background: '#fef3c7',
+          border: '1px solid #f59e0b',
+          borderRadius: 8,
+          marginBottom: 16,
+          fontSize: 13,
+          color: '#92400e',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
+        }}>
+          ⏰ Tu sesión expiró por inactividad. Por seguridad, debes volver a iniciar sesión.
+        </div>
+      )}
+      
+      {/* ... resto de tu formulario de login ... */}
+    </div>
+  )
+
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
