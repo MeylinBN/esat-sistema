@@ -1,42 +1,20 @@
 'use client'
+import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
-export default function LoginPage() {
+// ✅ Componente interno que usa useSearchParams
+function LoginForm() {
   const router = useRouter()
   const supabase = createClient()
   const [dni, setDni] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-   const searchParams = useSearchParams()
+  const searchParams = useSearchParams()
   const reason = searchParams.get('reason')
-
-  return (
-    <div style={{maxWidth:400, margin:'100px auto', padding:20}}>
-      {reason === 'timeout' && (
-        <div style={{
-          padding: '12px 16px',
-          background: '#fef3c7',
-          border: '1px solid #f59e0b',
-          borderRadius: 8,
-          marginBottom: 16,
-          fontSize: 13,
-          color: '#92400e',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8
-        }}>
-          ⏰ Tu sesión expiró por inactividad. Por seguridad, debes volver a iniciar sesión.
-        </div>
-      )}
-      
-      {/* ... resto de tu formulario de login ... */}
-    </div>
-  )
-
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -76,6 +54,24 @@ export default function LoginPage() {
         maxWidth: 450,
         boxShadow: '0 32px 80px rgba(0,0,0,.35)'
       }}>
+        {/* Mensaje de timeout */}
+        {reason === 'timeout' && (
+          <div style={{
+            padding: '12px 16px',
+            background: '#fef3c7',
+            border: '1px solid #f59e0b',
+            borderRadius: 8,
+            marginBottom: 16,
+            fontSize: 13,
+            color: '#92400e',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}>
+            ⏰ Tu sesión expiró por inactividad. Por seguridad, debes volver a iniciar sesión.
+          </div>
+        )}
+
         {/* Botón Volver */}
         <button
           onClick={() => router.push('/')}
@@ -218,5 +214,33 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+// ✅ Componente principal que envuelve en Suspense
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(160deg,#0a2a5e 0%,#003087 45%,#0a3fa8 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{
+          background: 'rgba(255,255,255,.97)',
+          borderRadius: 20,
+          padding: '32px 28px',
+          textAlign: 'center',
+          color: '#64748b'
+        }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🔐</div>
+          <div style={{ fontSize: 13 }}>Cargando...</div>
+        </div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   )
 }
