@@ -142,26 +142,32 @@ export default function MiPanelPage() {
     const estado = tardanzaMinutos > 0 ? 'tarde' : 'presente'
     const horaCompleta = horaActual+':00'
     
-    await supabase.from('asistencias').upsert(
+    const { error } = await supabase.from('asistencias').upsert(
       {persona_id:persona.id,fecha:hoy,hora_entrada:horaCompleta,estado,tardanza_min:tardanzaMinutos},
       {onConflict:'persona_id,fecha'}
     )
-    
-    setAlertaEntrada('')
+
     setRegistrando(false)
+    if(error){
+      setAlertaEntrada('⚠️ Error al registrar entrada: ' + error.message)
+      setTimeout(()=>setAlertaEntrada(''), 5000)
+      return
+    }
+    setAlertaEntrada('')
     load()
   }
 
   async function marcarSalida(){
     if(!persona||!asistHoy||registrando) return
     setRegistrando(true)
-    
+
     const horaActual = tiempo
     const horaCompleta = horaActual+':00'
-    
-    await supabase.from('asistencias').update({hora_salida:horaCompleta}).eq('id',asistHoy.id)
-    
+
+    const { error } = await supabase.from('asistencias').update({hora_salida:horaCompleta}).eq('id',asistHoy.id)
+
     setRegistrando(false)
+    if(error){ alert('Error al registrar salida: ' + error.message); return }
     load()
   }
 
@@ -176,16 +182,22 @@ export default function MiPanelPage() {
       hora_recuperacion_fin: necesitaRecuperar ? horaRecuperacionFin : null,
       recuperacion_aprobada: false
     }
-    await supabase.from('permisos').insert(permisoData)
-    setMotivoPermiso('');setNecesitaRecuperar(false);setDiaRecuperacion('');setHoraRecuperacionInicio('');setHoraRecuperacionFin('');setPermisoOk(true);setEnviandoPermiso(false)
+    const { error } = await supabase.from('permisos').insert(permisoData)
+    setEnviandoPermiso(false)
+    if(error){ alert('Error al enviar solicitud: ' + error.message); return }
+    setMotivoPermiso('');setNecesitaRecuperar(false);setDiaRecuperacion('');setHoraRecuperacionInicio('');setHoraRecuperacionFin('');setPermisoOk(true)
     setTimeout(()=>setPermisoOk(false),3000)
   }
 
   async function guardarAvance(){
     if(!mTarea||!mSem) return
     setSaving(true)
-    await supabase.from('avances_semanales').upsert({tarea_id:mTarea.id,semana:mSem,porcentaje:mPct},{onConflict:'tarea_id,semana'})
-    if(mPct>=100) await supabase.from('tareas').update({estado:'completada'}).eq('id',mTarea.id)
+    const { error } = await supabase.from('avances_semanales').upsert({tarea_id:mTarea.id,semana:mSem,porcentaje:mPct},{onConflict:'tarea_id,semana'})
+    if(error){ setSaving(false); alert('Error al guardar avance: ' + error.message); return }
+    if(mPct>=100){
+      const { error: estError } = await supabase.from('tareas').update({estado:'completada'}).eq('id',mTarea.id)
+      if(estError){ setSaving(false); alert('Error al completar tarea: ' + estError.message); return }
+    }
     setModalAv(false);setSaving(false);load()
   }
 

@@ -150,17 +150,21 @@ const recuperacionesConNombre = recuperacionesFiltradas.map(r => {
 
   async function guardarHorario(){
     setSaving(true)
-    await supabase.from('horarios').delete().eq('persona_id',editPerId)
+    const { error: delError } = await supabase.from('horarios').delete().eq('persona_id',editPerId)
+    if(delError){ setSaving(false); alert('Error al guardar horario: ' + delError.message); return }
     const rows:any[]=[]
     DIAS.forEach(d=>{editFranjas[d].forEach(f=>{if(f.e&&f.s)rows.push({persona_id:editPerId,dia:d,hora_entrada:f.e+':00',hora_salida:f.s+':00'})})})
-    if(rows.length) await supabase.from('horarios').insert(rows)
+    if(rows.length){
+      const { error: insError } = await supabase.from('horarios').insert(rows)
+      if(insError){ setSaving(false); alert('Error al guardar horario: ' + insError.message); return }
+    }
     setSaving(false);setModalEdit(false);load()
   }
 
   async function guardarCambio(){
     if(!mcPerId) return
     setSaving(true)
-    await supabase.from('permisos').insert({
+    const { error } = await supabase.from('permisos').insert({
       persona_id:mcPerId,
       tipo: 'cambio_horario',
       fecha_inicio:mcFecha,
@@ -169,7 +173,9 @@ const recuperacionesConNombre = recuperacionesFiltradas.map(r => {
       estado:'pendiente',
       dias_recuperacion: `${DIAS_NM[mcDia]} ${mcEntrada}-${mcSalida}`
     })
-    setSaving(false);setModalCambio(false);setMcMotivo('');load()
+    setSaving(false)
+    if(error){ alert('Error al registrar cambio: ' + error.message); return }
+    setModalCambio(false);setMcMotivo('');load()
   }
 
   const esat=personas.filter(p=>p.grupo==='ESAT')

@@ -53,6 +53,7 @@ export default function PersonasPage() {
   })
 
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string|null>(null)
 
   useEffect(()=>{
     load()
@@ -162,7 +163,8 @@ async function loadConfiguraciones(){
   }
 
   async function toggleActivo(id:string, activo:boolean){
-    await supabase.from('personas').update({activo:!activo}).eq('id',id)
+    const { error } = await supabase.from('personas').update({activo:!activo}).eq('id',id)
+    if(error){ alert('Error al actualizar estado: ' + error.message); return }
     load()
   }
 
@@ -195,7 +197,8 @@ async function loadConfiguraciones(){
   async function guardar(){
     if(!mNombre||!mDni) return
     setSaving(true)
-    
+    setError(null)
+
     const esEco = mRol==='EcoBIOTEM'
     const primeraEntrada = mHorariosDia.L?.[0]?.entrada ?? '08:00'
     
@@ -222,43 +225,62 @@ async function loadConfiguraciones(){
     }
 
     try {
-      let personaId = editando?.id
-      
       if(editando){
-        await supabase.from('personas').update(data).eq('id', editando.id)
-      } else {
-        const {data: nuevo} = await supabase.from('personas').insert({...data, activo:true}).select().single()
-        personaId = nuevo.id
-      }
+        const { error: updError } = await supabase.from('personas').update(data).eq('id', editando.id)
+        if(updError) throw updError
 
-      if(personaId && !esEco){
-        if(editando){
-          await supabase.from('horarios').delete().eq('persona_id', personaId)
-        }
-        
-        const horariosAInsertar: any[] = []
-        DIAS.forEach(dia=>{
-          (mHorariosDia[dia]||[]).forEach(franja=>{
-            horariosAInsertar.push({
-              persona_id: personaId,
-              dia: dia,
-              hora_entrada: franja.entrada + ':00',
-              hora_salida: franja.salida + ':00'
+        if(!esEco){
+          const { error: delError } = await supabase.from('horarios').delete().eq('persona_id', editando.id)
+          if(delError) throw delError
+
+          const horariosAInsertar: any[] = []
+          DIAS.forEach(dia=>{
+            (mHorariosDia[dia]||[]).forEach(franja=>{
+              horariosAInsertar.push({
+                persona_id: editando.id,
+                dia,
+                hora_entrada: franja.entrada + ':00',
+                hora_salida: franja.salida + ':00'
+              })
             })
           })
-        })
-        
-        if(horariosAInsertar.length > 0){
-          await supabase.from('horarios').insert(horariosAInsertar)
+
+          if(horariosAInsertar.length > 0){
+            const { error: horError } = await supabase.from('horarios').insert(horariosAInsertar)
+            if(horError) throw horError
+          }
         }
+      } else {
+        // Alta de personal nuevo: pasa por la API porque también hay que
+        // crear el usuario de Supabase Auth (requiere la service role key).
+        const horariosParaApi: any[] = []
+        if(!esEco){
+          DIAS.forEach(dia=>{
+            (mHorariosDia[dia]||[]).forEach(franja=>{
+              horariosParaApi.push({
+                dia,
+                hora_entrada: franja.entrada + ':00',
+                hora_salida: franja.salida + ':00'
+              })
+            })
+          })
+        }
+
+        const res = await fetch('/api/personas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ persona: data, horarios: horariosParaApi }),
+        })
+        const json = await res.json()
+        if(!res.ok) throw new Error(json.error || 'Error al crear persona')
       }
 
       setModal(false)
       setSaving(false)
       load()
-    } catch(err){
+    } catch(err:any){
       console.error('Error:', err)
-      alert('Error al guardar')
+      setError('Error al guardar: ' + (err?.message ?? 'error desconocido'))
       setSaving(false)
     }
   }
@@ -556,8 +578,14 @@ async function loadConfiguraciones(){
               </div>
             )}
 
+            {error && (
+              <div style={{padding:'10px 14px',background:'#fef2f2',border:'1px solid #fca5a5',borderRadius:9,fontSize:12,color:'#b91c1c',marginBottom:12}}>
+                ⚠️ {error}
+              </div>
+            )}
+
             <div style={{display:'flex',gap:8,justifyContent:'flex-end',paddingTop:16,borderTop:'1px solid #e2e8f0'}}>
-              <button onClick={()=>setModal(false)} 
+              <button onClick={()=>{setModal(false);setError(null)}}
                 style={{padding:'10px 20px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:13,fontFamily:'inherit',fontWeight:600}}
               >
                 Cancelar

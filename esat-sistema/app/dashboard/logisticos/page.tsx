@@ -108,7 +108,7 @@ export default function DashboardLogisticoPage() {
 
     // Registrar para cada persona seleccionada
     for (const personaId of tePersonas) {
-      await supabase.from('horas_extras').insert({
+      const { error } = await supabase.from('horas_extras').insert({
         persona_id: personaId,
         fecha: teFecha,
         hora_inicio: teHoraInicio + ':00',
@@ -118,6 +118,7 @@ export default function DashboardLogisticoPage() {
         aprobado: true,
         aprobado_por: coordinador?.id
       })
+      if(error){ alert('Error al registrar tiempo extra: ' + error.message); return }
     }
 
     setModalTiempoExtra(false)
@@ -131,11 +132,12 @@ export default function DashboardLogisticoPage() {
   }
 
   async function aprobarPermiso(id: string, estado: string) {
-    await supabase.from('permisos').update({
+    const { error } = await supabase.from('permisos').update({
       estado: estado,
       recuperacion_aprobada: estado === 'aprobado',
       revisado_por: coordinador?.id
     }).eq('id', id)
+    if(error){ alert('Error al actualizar permiso: ' + error.message); return }
     load()
   }
 
@@ -147,13 +149,14 @@ export default function DashboardLogisticoPage() {
 
     // Registrar para cada persona seleccionada
     for (const personaId of flexPersonas) {
-      await supabase.from('flexibilidad_horaria').insert({
+      const { error } = await supabase.from('flexibilidad_horaria').insert({
         persona_id: personaId,
         fecha: flexFecha,
         minutos_gracia: parseInt(flexMinutos),
         motivo: flexMotivo,
         autorizado_por: coordinador?.id
       })
+      if(error){ alert('Error al registrar flexibilidad: ' + error.message); return }
     }
 
     setModalFlex(false)

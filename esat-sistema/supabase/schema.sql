@@ -1,6 +1,11 @@
 -- ============================================================
 --  ESAT · CIAD — Sistema de Gestión  |  Supabase Schema
 --  Ejecutar en el SQL Editor de tu proyecto Supabase
+--
+--  Este archivo es la fuente de verdad para una instalación
+--  NUEVA desde cero. Si ya tienes datos en producción, NO lo
+--  vuelvas a ejecutar entero: usa en su lugar los scripts de
+--  supabase/migrations/ (son idempotentes y no borran nada).
 -- ============================================================
 
 -- ─── EXTENSIONES ───────────────────────────────────────────
@@ -13,7 +18,8 @@ create table if not exists public.personas (
   dni           text unique not null,
   rol           text not null check (rol in ('Practicante','Tesista','Voluntario','Investigador','Asistente','SENATI','EcoBIOTEM','Coordinador')),
   subrol        text,
-  grupo         text not null default 'ESAT',  -- 'ESAT' | 'EcoBIOTEM'
+  grupo         text not null default 'ESAT',  -- 'ESAT' | 'EcoBIOTEM' | 'GAMH' | 'PAMEC' | 'CIAD'
+  origen        text,                          -- 'UNASAM' | 'SENATI' | 'Externo' | ...
   hora_ingreso  time,                           -- null para EcoBIOTEM
   tolerancia    int not null default 10,        -- minutos
   activo        boolean not null default true,
@@ -22,9 +28,19 @@ create table if not exists public.personas (
   hs_semanales  numeric(5,2),
   sin_horario   boolean not null default false,
   password_hash text,                           -- bcrypt, se gestiona por Supabase Auth
+  auth_id       uuid references auth.users(id) on delete set null,  -- vínculo con Supabase Auth
+  fecha_cumpleanos date,
+  celular       text,
+  correo_personal text,
+  domicilio     text,
+  contacto_emergencia_nombre     text,
+  contacto_emergencia_telefono   text,
+  contacto_emergencia_parentesco text,
   created_at    timestamptz default now(),
   updated_at    timestamptz default now()
 );
+
+create unique index if not exists personas_auth_id_key on public.personas(auth_id) where auth_id is not null;
 
 -- ─── TABLA: horarios ───────────────────────────────────────
 -- Cada fila es una franja horaria de un día para una persona
@@ -48,6 +64,9 @@ create table if not exists public.asistencias (
               check (estado in ('presente','tarde','ausente','permiso','falta_justificada','falta_injustificada','vacaciones')),
   tardanza_min int default 0,
   observacion text,
+  hora_recuperacion time,          -- hora marcada fuera de horario (recuperación)
+  recuperacion_motivo text,
+  recuperacion_aprobada boolean,
   registrado_por uuid references public.personas(id),
   created_at  timestamptz default now(),
   unique (persona_id, fecha)
@@ -59,14 +78,20 @@ create table if not exists public.permisos (
   persona_id  uuid not null references public.personas(id) on delete cascade,
   tipo        text not null check (tipo in (
     'permiso_medico','permiso_personal','permiso_academico',
-    'falta_justificada','falta_injustificada','vacaciones')),
+    'falta_justificada','falta_injustificada','vacaciones','cambio_horario')),
   fecha_inicio date not null,
   fecha_fin    date not null,
   motivo       text,
+  sustento_texto text,
   estado       text not null default 'pendiente'
                check (estado in ('aprobado','pendiente','rechazado')),
-  dias_recuperacion text,
+  dias_recuperacion text,          -- descripción libre ("Martes 08:30-13:00")
+  dia_recuperacion  date,          -- fecha concreta de recuperación
+  hora_recuperacion_inicio time,
+  hora_recuperacion_fin    time,
+  recuperacion_aprobada boolean not null default false,
   aprobado_por uuid references public.personas(id),
+  revisado_por uuid references public.personas(id),
   created_at   timestamptz default now(),
   updated_at   timestamptz default now()
 );
@@ -74,7 +99,7 @@ create table if not exists public.permisos (
 -- ─── TABLA: avisos ─────────────────────────────────────────
 create table if not exists public.avisos (
   id          uuid primary key default uuid_generate_v4(),
-  tipo        text not null check (tipo in ('horario','permiso','anuncio','recordatorio','urgente')),
+  tipo        text not null check (tipo in ('horario','permiso','anuncio','recordatorio','urgente','reunion')),
   titulo      text not null,
   descripcion text,
   destinatario text not null default 'todos',
@@ -92,8 +117,9 @@ create table if not exists public.tareas (
   persona_id    uuid not null references public.personas(id) on delete cascade,
   prioridad     text not null default 'media' check (prioridad in ('alta','media','baja')),
   estado        text not null default 'pendiente'
-                check (estado in ('pendiente','en_progreso','completada','cancelada')),
+                check (estado in ('pendiente','asignado','en_progreso','pendiente_revision','subsanacion','completada','cancelada')),
   fecha_limite  date,
+  fecha_revision date,
   horas_estimadas numeric(6,2),
   semana        text,
   asignado_por  text,
@@ -108,6 +134,7 @@ create table if not exists public.avances_semanales (
   tarea_id   uuid not null references public.tareas(id) on delete cascade,
   semana     text not null,
   porcentaje int not null default 0 check (porcentaje between 0 and 100),
+  comentario text,
   created_at timestamptz default now(),
   unique (tarea_id, semana)
 );
@@ -138,6 +165,65 @@ create table if not exists public.cambios_horario (
   created_at timestamptz default now()
 );
 
+-- ─── TABLA: horas_extras ───────────────────────────────────
+create table if not exists public.horas_extras (
+  id                uuid primary key default uuid_generate_v4(),
+  persona_id        uuid not null references public.personas(id) on delete cascade,
+  fecha             date not null default current_date,
+  hora_inicio       time not null,
+  hora_fin          time not null,
+  horas_solicitadas numeric(5,2),
+  motivo            text,
+  aprobado          boolean not null default false,
+  aprobado_por      uuid references public.personas(id),
+  created_at        timestamptz default now()
+);
+
+-- ─── TABLA: flexibilidad_horaria ───────────────────────────
+create table if not exists public.flexibilidad_horaria (
+  id              uuid primary key default uuid_generate_v4(),
+  persona_id      uuid not null references public.personas(id) on delete cascade,
+  fecha           date not null default current_date,
+  minutos_gracia  int not null default 0,
+  motivo          text,
+  autorizado_por  uuid references public.personas(id),
+  created_at      timestamptz default now()
+);
+
+-- ─── TABLAS DE CATÁLOGO (dropdowns configurables) ──────────
+-- Se usa create+alter (en vez de todo en el create table) para que este
+-- script también sea seguro de correr sobre una base donde estas tablas
+-- ya existan a medias.
+create table if not exists public.areas (
+  id      uuid primary key default uuid_generate_v4(),
+  nombre  text not null
+);
+alter table public.areas add column if not exists activo boolean not null default true;
+alter table public.areas add column if not exists orden int default 0;
+create unique index if not exists areas_nombre_key on public.areas(nombre);
+
+create table if not exists public.origenes (
+  id      uuid primary key default uuid_generate_v4(),
+  nombre  text not null
+);
+alter table public.origenes add column if not exists activo boolean not null default true;
+alter table public.origenes add column if not exists orden int default 0;
+create unique index if not exists origenes_nombre_key on public.origenes(nombre);
+
+create table if not exists public.config_roles (
+  id      uuid primary key default uuid_generate_v4(),
+  nombre  text not null
+);
+alter table public.config_roles add column if not exists orden int default 0;
+create unique index if not exists config_roles_nombre_key on public.config_roles(nombre);
+
+create table if not exists public.config_grupos (
+  id      uuid primary key default uuid_generate_v4(),
+  nombre  text not null
+);
+alter table public.config_grupos add column if not exists orden int default 0;
+create unique index if not exists config_grupos_nombre_key on public.config_grupos(nombre);
+
 -- ─── RLS: Row Level Security ───────────────────────────────
 alter table public.personas          enable row level security;
 alter table public.horarios          enable row level security;
@@ -148,6 +234,12 @@ alter table public.tareas            enable row level security;
 alter table public.avances_semanales enable row level security;
 alter table public.sesiones_eco      enable row level security;
 alter table public.cambios_horario   enable row level security;
+alter table public.horas_extras      enable row level security;
+alter table public.flexibilidad_horaria enable row level security;
+alter table public.areas             enable row level security;
+alter table public.origenes          enable row level security;
+alter table public.config_roles      enable row level security;
+alter table public.config_grupos     enable row level security;
 
 -- Política: Coordinadores ven todo (usar rol de Supabase Auth)
 -- Por ahora: acceso abierto autenticado (ajustar según roles de auth)
@@ -159,6 +251,12 @@ create policy "Autenticado lee avisos"    on public.avisos    for select using (
 create policy "Autenticado lee tareas"    on public.tareas    for select using (auth.role() = 'authenticated');
 create policy "Autenticado lee avances"   on public.avances_semanales for select using (auth.role() = 'authenticated');
 create policy "Autenticado lee sesiones"  on public.sesiones_eco for select using (auth.role() = 'authenticated');
+create policy "Autenticado lee horas_extras" on public.horas_extras for select using (auth.role() = 'authenticated');
+create policy "Autenticado lee flex"      on public.flexibilidad_horaria for select using (auth.role() = 'authenticated');
+create policy "Autenticado lee areas"     on public.areas    for select using (auth.role() = 'authenticated');
+create policy "Autenticado lee origenes"  on public.origenes for select using (auth.role() = 'authenticated');
+create policy "Autenticado lee roles"     on public.config_roles  for select using (auth.role() = 'authenticated');
+create policy "Autenticado lee grupos"    on public.config_grupos for select using (auth.role() = 'authenticated');
 
 create policy "Autenticado escribe asist" on public.asistencias for all using (auth.role() = 'authenticated');
 create policy "Autenticado escribe tareas" on public.tareas for all using (auth.role() = 'authenticated');
@@ -169,6 +267,31 @@ create policy "Autenticado escribe horarios" on public.horarios for all using (a
 create policy "Autenticado escribe avances"  on public.avances_semanales for all using (auth.role() = 'authenticated');
 create policy "Autenticado escribe sesiones" on public.sesiones_eco for all using (auth.role() = 'authenticated');
 create policy "Autenticado escribe cambios"  on public.cambios_horario for all using (auth.role() = 'authenticated');
+create policy "Autenticado escribe horas_extras" on public.horas_extras for all using (auth.role() = 'authenticated');
+create policy "Autenticado escribe flex"     on public.flexibilidad_horaria for all using (auth.role() = 'authenticated');
+create policy "Autenticado escribe areas"    on public.areas for all using (auth.role() = 'authenticated');
+create policy "Autenticado escribe origenes" on public.origenes for all using (auth.role() = 'authenticated');
+create policy "Autenticado escribe roles"    on public.config_roles for all using (auth.role() = 'authenticated');
+create policy "Autenticado escribe grupos"   on public.config_grupos for all using (auth.role() = 'authenticated');
+
+-- ─── SEED: catálogos ────────────────────────────────────────
+insert into public.areas (nombre, orden) values
+  ('Ambiental',1),('Sistemas',2),('Técnico',3),('General',4),
+  ('Ecología',5),('Biodiversidad',6),('Biotecnología',7)
+on conflict (nombre) do nothing;
+
+insert into public.origenes (nombre, orden) values
+  ('UNASAM',1),('SENATI',2),('Externo',3)
+on conflict (nombre) do nothing;
+
+insert into public.config_roles (nombre, orden) values
+  ('Practicante',1),('Tesista',2),('Voluntario',3),('Investigador',4),
+  ('Asistente',5),('SENATI',6),('EcoBIOTEM',7),('Coordinador',8)
+on conflict (nombre) do nothing;
+
+insert into public.config_grupos (nombre, orden) values
+  ('ESAT',1),('EcoBIOTEM',2),('GAMH',3),('PAMEC',4),('CIAD',5)
+on conflict (nombre) do nothing;
 
 -- ─── SEED: personas iniciales ──────────────────────────────
 -- Los DNIs reales ya están en el HTML; passwords se crean vía Supabase Auth invite

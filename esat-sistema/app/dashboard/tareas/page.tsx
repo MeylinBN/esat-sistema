@@ -135,18 +135,21 @@ export default function TareasPage() {
 }
 
   async function cambiarEstado(id:string, estado:string){
-    await supabase.from('tareas').update({estado}).eq('id',id)
+    const { error } = await supabase.from('tareas').update({estado}).eq('id',id)
+    if(error){ alert('Error al cambiar estado: ' + error.message); return }
     load()
   }
 
   async function revivirTarea(id:string){
-    await supabase.from('tareas').update({estado:'en_progreso'}).eq('id',id)
+    const { error } = await supabase.from('tareas').update({estado:'en_progreso'}).eq('id',id)
+    if(error){ alert('Error al reactivar tarea: ' + error.message); return }
     load()
   }
 
   async function eliminarTarea(id:string){
     if(!confirm('¿Eliminar esta tarea?')) return
-    await supabase.from('tareas').delete().eq('id',id)
+    const { error } = await supabase.from('tareas').delete().eq('id',id)
+    if(error){ alert('Error al eliminar tarea: ' + error.message); return }
     load()
   }
 
@@ -170,19 +173,26 @@ export default function TareasPage() {
       fecha_revision:mFechaRevision||null,semana:mSemana||null,
       asignado_por:mAsig||null,comentario:mComent||null
     }
-    if(editando) await supabase.from('tareas').update(data).eq('id',editando.id)
-    else await supabase.from('tareas').insert(data)
-    setModal(false);setSaving(false);load()
+    const { error } = editando
+      ? await supabase.from('tareas').update(data).eq('id',editando.id)
+      : await supabase.from('tareas').insert(data)
+    setSaving(false)
+    if(error){ alert('Error al guardar tarea: ' + error.message); return }
+    setModal(false);load()
   }
 
   async function guardarAvance(){
     if(!mAvTarea||!mAvSem) return
     setSaving(true)
-    await supabase.from('avances_semanales').upsert(
+    const { error } = await supabase.from('avances_semanales').upsert(
       {tarea_id:mAvTarea.id,semana:mAvSem,porcentaje:mAvPct,comentario:mAvComentario||null},
       {onConflict:'tarea_id,semana'}
     )
-    if(mAvPct>=100) await supabase.from('tareas').update({estado:'completada'}).eq('id',mAvTarea.id)
+    if(error){ setSaving(false); alert('Error al guardar avance: ' + error.message); return }
+    if(mAvPct>=100){
+      const { error: estError } = await supabase.from('tareas').update({estado:'completada'}).eq('id',mAvTarea.id)
+      if(estError){ setSaving(false); alert('Error al completar tarea: ' + estError.message); return }
+    }
     setModalAv(false);setMAvComentario('');setSaving(false);load()
   }
 
@@ -540,7 +550,8 @@ export default function TareasPage() {
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Estado de la tarea</label>
               <select value={mAvTarea.estado} onChange={async e=>{
                 const nuevoEstado = e.target.value
-                await supabase.from('tareas').update({estado:nuevoEstado}).eq('id',mAvTarea.id)
+                const { error } = await supabase.from('tareas').update({estado:nuevoEstado}).eq('id',mAvTarea.id)
+                if(error){ alert('Error al cambiar estado: ' + error.message); return }
                 load()
               }} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
                 {Object.entries(ESTADO_CFG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}

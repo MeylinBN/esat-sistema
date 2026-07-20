@@ -141,9 +141,10 @@ export default function AsistenciaPage() {
       tard=Math.max(0,(hR*60+mR)-(hE*60+mE)-toleranciaTotal)
     }
     
+    let opError = null
     if(!asist){
       const estado = mEstado!=='presente' ? mEstado : (esRecuperacion ? 'presente' : tard>0?'tarde':'presente')
-      await supabase.from('asistencias').insert({
+      const { error } = await supabase.from('asistencias').insert({
         persona_id:mPerId,fecha:hoy,
         hora_entrada:mTipo==='entrada'?horaCompleta:null,
         hora_salida:mTipo==='salida'?horaCompleta:null,
@@ -152,6 +153,7 @@ export default function AsistenciaPage() {
         recuperacion_aprobada: esRecuperacion ? false : null,
         estado,tardanza_min:tard,observacion:mObs||null
       })
+      opError = error
     } else {
       const upd:any={observacion:mObs||asist.observacion}
       if(mTipo==='entrada'){
@@ -169,9 +171,15 @@ export default function AsistenciaPage() {
           upd.recuperacion_motivo = motivoRecuperacion
         }
       }
-      await supabase.from('asistencias').update(upd).eq('id',asist.id)
+      const { error } = await supabase.from('asistencias').update(upd).eq('id',asist.id)
+      opError = error
     }
-    setModal(false);setMObs('');setEsRecuperacion(false);setMotivoRecuperacion('');setSaving(false);load()
+    setSaving(false)
+    if(opError){
+      alert('Error al registrar asistencia: ' + opError.message)
+      return
+    }
+    setModal(false);setMObs('');setEsRecuperacion(false);setMotivoRecuperacion('');load()
   }
 
   // ✅ CORRECCIÓN: Filtrar por grupo del usuario logueado

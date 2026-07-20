@@ -38,19 +38,22 @@ export default function AvisosPage() {
   async function guardar(){
     if(!mTitulo) return
     setSaving(true)
-    await supabase.from('avisos').insert({
+    const { error } = await supabase.from('avisos').insert({
       tipo:mTipo,
       titulo:mTitulo,
       descripcion:mDesc,
       destinatario:mDest,
       fecha_evento:mFecha||null
     })
-    setModal(false);setMTitulo('');setMDesc('');setMFecha('');setSaving(false);load()
+    setSaving(false)
+    if(error){ alert('Error al guardar aviso: ' + error.message); return }
+    setModal(false);setMTitulo('');setMDesc('');setMFecha('');load()
   }
 
   async function eliminar(id:string){
     if(!confirm('¿Eliminar este aviso?')) return
-    await supabase.from('avisos').delete().eq('id',id)
+    const { error } = await supabase.from('avisos').delete().eq('id',id)
+    if(error){ alert('Error al eliminar aviso: ' + error.message); return }
     load()
   }
 
