@@ -16,7 +16,7 @@ create table if not exists public.personas (
   id            uuid primary key default uuid_generate_v4(),
   nombre        text not null,
   dni           text unique not null,
-  rol           text not null check (rol in ('Practicante','Tesista','Voluntario','Investigador','Asistente','SENATI','EcoBIOTEM','Coordinador')),
+  rol           text not null check (rol in ('Practicante','Tesista','Voluntario','Investigador','Investigador Formativo','Asistente','SENATI','EcoBIOTEM','Coordinador')),
   subrol        text,
   grupo         text not null default 'ESAT',  -- 'ESAT' | 'EcoBIOTEM' | 'GAMH' | 'PAMEC' | 'CIAD'
   origen        text,                          -- 'UNASAM' | 'SENATI' | 'Externo' | ...
@@ -286,7 +286,7 @@ on conflict (nombre) do nothing;
 
 insert into public.config_roles (nombre, orden) values
   ('Practicante',1),('Tesista',2),('Voluntario',3),('Investigador',4),
-  ('Asistente',5),('SENATI',6),('EcoBIOTEM',7),('Coordinador',8)
+  ('Investigador Formativo',5),('Asistente',6),('SENATI',7),('EcoBIOTEM',8),('Coordinador',9)
 on conflict (nombre) do nothing;
 
 insert into public.config_grupos (nombre, orden) values
