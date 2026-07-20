@@ -166,11 +166,6 @@ create policy "Autenticado escribe grupos" on public.config_grupos for all using
 -- ─── 4. SEEDS BÁSICOS (edítalos luego desde el SQL Editor o
 --        crea una pantalla de configuración; por ahora el
 --        código solo LEE de estas tablas) ───────────────────
-insert into public.areas (nombre, orden) values
-  ('Ambiental',1),('Sistemas',2),('Técnico',3),('General',4),
-  ('Ecología',5),('Biodiversidad',6),('Biotecnología',7)
-on conflict (nombre) do nothing;
-
 insert into public.origenes (nombre, orden) values
   ('UNASAM',1),('SENATI',2),('Externo',3)
 on conflict (nombre) do nothing;

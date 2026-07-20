@@ -275,10 +275,8 @@ create policy "Autenticado escribe roles"    on public.config_roles for all usin
 create policy "Autenticado escribe grupos"   on public.config_grupos for all using (auth.role() = 'authenticated');
 
 -- ─── SEED: catálogos ────────────────────────────────────────
-insert into public.areas (nombre, orden) values
-  ('Ambiental',1),('Sistemas',2),('Técnico',3),('General',4),
-  ('Ecología',5),('Biodiversidad',6),('Biotecnología',7)
-on conflict (nombre) do nothing;
+-- areas: sin seed por defecto, se define desde la app según la
+-- estructura real de la organización.
 
 insert into public.origenes (nombre, orden) values
   ('UNASAM',1),('SENATI',2),('Externo',3)
