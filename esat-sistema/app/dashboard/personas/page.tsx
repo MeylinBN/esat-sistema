@@ -215,7 +215,7 @@ async function loadConfiguraciones(){
       origen: mOrigen,
       grupo: mGrupo,
       hora_ingreso: esEco?null:(primeraEntrada + ':00'),
-      tolerancia: 10,
+      tolerancia: 5,
       color: mColor,
       area: mArea||null,
       hs_semanales: esEco?null:parseFloat(calcularHorasSemanales(mHorariosDia)),

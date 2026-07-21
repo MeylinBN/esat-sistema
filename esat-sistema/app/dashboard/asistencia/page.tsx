@@ -85,7 +85,7 @@ export default function AsistenciaPage() {
     }
     
     const [p,a,h,t,flex,te] = await Promise.all([
-      supabase.from('personas').select('*').eq('activo',true).eq('grupo', grupoDelUsuario).order('nombre'),
+      supabase.from('personas').select('*').eq('activo',true).eq('grupo', grupoDelUsuario).neq('rol','Coordinador').order('nombre'),
       supabase.from('asistencias').select('*').eq('fecha',hoy),
       supabase.from('horarios').select('*'),
       supabase.from('tareas').select('persona_id,estado'),

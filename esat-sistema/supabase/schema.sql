@@ -21,7 +21,7 @@ create table if not exists public.personas (
   grupo         text not null default 'ESAT',  -- 'ESAT' | 'EcoBIOTEM' | 'GAMH' | 'PAMEC' | 'CIAD'
   origen        text,                          -- 'UNASAM' | 'SENATI' | 'Externo' | ...
   hora_ingreso  time,                           -- null para EcoBIOTEM
-  tolerancia    int not null default 10,        -- minutos
+  tolerancia    int not null default 5,         -- minutos
   activo        boolean not null default true,
   color         text not null default '#1e40af',
   area          text,

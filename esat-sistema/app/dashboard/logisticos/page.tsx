@@ -58,6 +58,7 @@ export default function DashboardLogisticoPage() {
       .select('*')
       .eq('activo', true)
       .eq('grupo', grupoAsignado)  // ← Solo personas de SU grupo
+      .neq('rol', 'Coordinador')  // Los coordinadores no marcan asistencia
       .order('nombre'),
     supabase.from('asistencias')
       .select('*')
