@@ -44,6 +44,22 @@ export function useLocationCheck(): LocationCheckResult & { recheck: () => void 
   })
 
   const check = useCallback(async () => {
+    // Interruptor temporal para pruebas: pon NEXT_PUBLIC_SKIP_LOCATION_CHECK=true
+    // en las variables de entorno de Vercel para desactivar la verificación de
+    // WiFi/GPS mientras se terminan otros ajustes. Quítalo (o ponlo en false)
+    // para volver a exigirla.
+    if (process.env.NEXT_PUBLIC_SKIP_LOCATION_CHECK === 'true') {
+      setState({
+        status: 'authorized',
+        ipOk: true,
+        gpsOk: true,
+        distanciaMetros: 0,
+        mensaje: '⚠️ Verificación de ubicación desactivada temporalmente',
+        checking: false,
+      })
+      return
+    }
+
     setState(s => ({ ...s, status: 'checking', checking: true, mensaje: 'Verificando ubicación...' }))
 
     // ── 1. Verificar IP ──────────────────────────────
