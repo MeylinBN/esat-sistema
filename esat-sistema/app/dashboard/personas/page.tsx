@@ -9,12 +9,12 @@ const DIAS = ['L','M','X','J','V']
 const DIAS_LABEL: Record<string,string> = {L:'Lunes',M:'Martes',X:'Miércoles',J:'Jueves',V:'Viernes'}
 
 const GRUPOS_CONFIG = [
-  {rol:'Coordinador', label:'⭐ Coordinadores',      color:'#c9a227'},
-  {rol:'Practicante', label:'🎓 Practicantes UNASAM', color:'#1e40af'},
-  {rol:'SENATI',      label:'🔧 Practicantes SENATI', color:'#92400e'},
-  {rol:'Voluntario',  label:'🤝 Voluntarios',         color:'#15803d'},
-  {rol:'Asistente',   label:'💼 Asistentes',          color:'#374151'},
-  {rol:'EcoBIOTEM',   label:'🌿 GI EcoBIOTEM',        color:'#166534'},
+  {rol:'Coordinador', label:'⭐ Coordinadores',      color:'#c9a227', match:(p:any)=>p.rol==='Coordinador'},
+  {rol:'Practicante', label:'🎓 Practicantes UNASAM', color:'#1e40af', match:(p:any)=>p.rol==='Practicante' && p.origen!=='SENATI'},
+  {rol:'SENATI',      label:'🔧 Practicantes SENATI', color:'#92400e', match:(p:any)=>p.origen==='SENATI'},
+  {rol:'Voluntario',  label:'🤝 Voluntarios',         color:'#15803d', match:(p:any)=>p.rol==='Voluntario'},
+  {rol:'Asistente',   label:'💼 Asistentes',          color:'#374151', match:(p:any)=>p.rol==='Asistente'},
+  {rol:'EcoBIOTEM',   label:'🌿 GI EcoBIOTEM',        color:'#166534', match:(p:any)=>p.grupo==='EcoBIOTEM'},
 ]
 
 const GRUPOS_DISPONIBLES = ['ESAT', 'EcoBIOTEM', 'GAMH', 'PAMEC', 'CIAD']
@@ -34,6 +34,9 @@ export default function PersonasPage() {
   const [mNombre, setMNombre] = useState('')
   const [mDni, setMDni] = useState('')
   const [mRol, setMRol] = useState('Practicante')
+  const [mRolOtro, setMRolOtro] = useState(false)
+  const [mOrigenOtro, setMOrigenOtro] = useState(false)
+  const [mGrupoOtro, setMGrupoOtro] = useState(false)
   const [mSubrol, setMSubrol] = useState('')
   const [mOrigen, setMOrigen] = useState('UNASAM')
   const [mGrupo, setMGrupo] = useState('ESAT')
@@ -111,9 +114,12 @@ async function loadConfiguraciones(){
     setMNombre('')
     setMDni('')
     setMRol('Practicante')
+    setMRolOtro(false)
     setMSubrol('')
     setMOrigen(origenes[0]||'UNASAM')
+    setMOrigenOtro(false)
     setMGrupo('ESAT')
+    setMGrupoOtro(false)
     setMArea(areas[0]||'Ing. Sistemas')
     setMColor('#1e40af')
     setMHorariosDia({L: [], M: [], X: [], J: [], V: []})
@@ -132,9 +138,12 @@ async function loadConfiguraciones(){
     setMNombre(p.nombre)
     setMDni(p.dni)
     setMRol(p.rol)
+    setMRolOtro(!!p.rol && !rolesConfig.includes(p.rol))
     setMSubrol(p.subrol ?? '')
     setMOrigen(p.origen || origenes[0] || 'UNASAM')
+    setMOrigenOtro(!!p.origen && !origenes.includes(p.origen))
     setMGrupo(p.grupo)
+    setMGrupoOtro(!!p.grupo && !gruposConfig.includes(p.grupo))
     setMArea(p.area || areas[0] || 'Ing. Sistemas')
     setMColor(p.color ?? '#1e40af')
     
@@ -199,12 +208,23 @@ async function loadConfiguraciones(){
     setMHorariosDia(nuevas)
   }
 
+  // Si se escribió un valor nuevo con "Otro...", lo agrega al catálogo
+  // para que aparezca en el desplegable la próxima vez.
+  async function guardarValorNuevoEnCatalogo(tabla:string, valor:string){
+    if(!valor.trim()) return
+    await supabase.from(tabla).upsert({nombre:valor.trim(), orden:99}, {onConflict:'nombre', ignoreDuplicates:true})
+  }
+
   async function guardar(){
     if(!mNombre||!mDni) return
     setSaving(true)
     setError(null)
 
-    const esEco = mRol==='EcoBIOTEM'
+    if(mRolOtro) await guardarValorNuevoEnCatalogo('config_roles', mRol)
+    if(mOrigenOtro) await guardarValorNuevoEnCatalogo('origenes', mOrigen)
+    if(mGrupoOtro) await guardarValorNuevoEnCatalogo('config_grupos', mGrupo)
+
+    const esEco = mGrupo==='EcoBIOTEM'
     const primeraEntrada = mHorariosDia.L?.[0]?.entrada ?? '08:00'
     
     const data = {
@@ -341,7 +361,7 @@ async function loadConfiguraciones(){
       )}
 
       {GRUPOS_CONFIG.map(grupo=>{
-        const gp = filtradas.filter(p=>p.rol===grupo.rol)
+        const gp = filtradas.filter(grupo.match)
         if(!gp.length) return null
         return (
           <div key={grupo.rol} style={{marginBottom:28}}>
@@ -432,31 +452,61 @@ async function loadConfiguraciones(){
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:12}}>
              <div>
   <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Rol</label>
-<select value={mRol} onChange={e=>setMRol(e.target.value)}
-  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
->
-  {rolesConfig.map(r => <option key={r} value={r}>{r}</option>)}
-</select>
+{!mRolOtro ? (
+  <select value={mRol} onChange={e=>{
+    if(e.target.value==='__otro__'){ setMRolOtro(true); setMRol('') }
+    else setMRol(e.target.value)
+  }} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
+    {rolesConfig.map(r => <option key={r} value={r}>{r}</option>)}
+    <option value="__otro__">Otro...</option>
+  </select>
+) : (
+  <div style={{display:'flex',gap:6}}>
+    <input value={mRol} onChange={e=>setMRol(e.target.value)} placeholder="Escribe el rol" autoFocus
+      style={{flex:1,padding:'9px 12px',border:'1.5px solid #93c5fd',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+    <button type="button" onClick={()=>{setMRolOtro(false);setMRol(rolesConfig[0]||'Practicante')}}
+      style={{padding:'0 10px',border:'1px solid #e2e8f0',borderRadius:9,background:'white',cursor:'pointer',fontSize:12}}>×</button>
+  </div>
+)}
 </div>
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Origen</label>
-                <select value={mOrigen} onChange={e=>setMOrigen(e.target.value)}
-                  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
-                >
-                  {origenes.length === 0 ? (
-                    <option value="UNASAM">UNASAM</option>
-                  ) : (
-                    origenes.map(o => <option key={o} value={o}>{o}</option>)
-                  )}
-                </select>
+                {!mOrigenOtro ? (
+                  <select value={mOrigen} onChange={e=>{
+                    if(e.target.value==='__otro__'){ setMOrigenOtro(true); setMOrigen('') }
+                    else setMOrigen(e.target.value)
+                  }} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
+                    {origenes.length === 0 && <option value="UNASAM">UNASAM</option>}
+                    {origenes.map(o => <option key={o} value={o}>{o}</option>)}
+                    <option value="__otro__">Otro...</option>
+                  </select>
+                ) : (
+                  <div style={{display:'flex',gap:6}}>
+                    <input value={mOrigen} onChange={e=>setMOrigen(e.target.value)} placeholder="Escribe el origen" autoFocus
+                      style={{flex:1,padding:'9px 12px',border:'1.5px solid #93c5fd',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+                    <button type="button" onClick={()=>{setMOrigenOtro(false);setMOrigen(origenes[0]||'UNASAM')}}
+                      style={{padding:'0 10px',border:'1px solid #e2e8f0',borderRadius:9,background:'white',cursor:'pointer',fontSize:12}}>×</button>
+                  </div>
+                )}
               </div>
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Grupo</label>
-               <select value={mGrupo} onChange={e=>setMGrupo(e.target.value)}
-  style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
->
-  {gruposConfig.map(g => <option key={g} value={g}>{g}</option>)}
-</select>
+                {!mGrupoOtro ? (
+                  <select value={mGrupo} onChange={e=>{
+                    if(e.target.value==='__otro__'){ setMGrupoOtro(true); setMGrupo('') }
+                    else setMGrupo(e.target.value)
+                  }} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
+                    {gruposConfig.map(g => <option key={g} value={g}>{g}</option>)}
+                    <option value="__otro__">Otro...</option>
+                  </select>
+                ) : (
+                  <div style={{display:'flex',gap:6}}>
+                    <input value={mGrupo} onChange={e=>setMGrupo(e.target.value)} placeholder="Escribe el grupo" autoFocus
+                      style={{flex:1,padding:'9px 12px',border:'1.5px solid #93c5fd',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
+                    <button type="button" onClick={()=>{setMGrupoOtro(false);setMGrupo('ESAT')}}
+                      style={{padding:'0 10px',border:'1px solid #e2e8f0',borderRadius:9,background:'white',cursor:'pointer',fontSize:12}}>×</button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -537,7 +587,7 @@ async function loadConfiguraciones(){
               </div>
             </div>
 
-            {mRol !== 'EcoBIOTEM' && (
+            {mGrupo !== 'EcoBIOTEM' && (
               <div style={{marginBottom:16,padding:'16px',background:'#f8fafc',borderRadius:12,border:'1.5px solid #e2e8f0'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
                   <h4 style={{fontSize:13,fontWeight:600,color:'#0f172a',margin:0}}>📅 Horarios por día (Máx. 2 turnos)</h4>

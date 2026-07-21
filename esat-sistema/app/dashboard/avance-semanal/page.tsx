@@ -135,7 +135,7 @@ export default function AvancesPage() {
                 <div style={{ width: 38, height: 38, borderRadius: '50%', background: p.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: 'white', flexShrink: 0 }}>{p.nombre.charAt(0)}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{p.nombre}</div>
-                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{p.rol === 'SENATI' ? `SENATI · ${p.subrol}` : p.subrol ?? p.rol}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{p.origen === 'SENATI' ? `SENATI · ${p.subrol}` : p.subrol ?? p.rol}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ textAlign: 'center' }}><div style={{ fontSize: 16, fontWeight: 700, color: '#0369a1' }}>{stats.asignadas}</div><div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase' }}>Asignadas</div></div>

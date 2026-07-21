@@ -47,7 +47,7 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
   }
 
   // Filtro ESAT (excluir EcoBIOTEM y Coordinadores)
-  const esat = (personas??[]).filter(p=>p.rol!=='EcoBIOTEM' && p.rol!=='Coordinador')
+  const esat = (personas??[]).filter(p=>p.grupo!=='EcoBIOTEM' && p.rol!=='Coordinador')
   // Dedupe por persona: con 2 turnos al día una persona puede tener 2 filas hoy
   const presentes = new Set(asistHoy.filter(a=>['presente','tarde'].includes(a.estado)).map(a=>a.persona_id)).size
   const tardanzas = new Set(asistHoy.filter(a=>a.estado==='tarde').map(a=>a.persona_id)).size
@@ -68,8 +68,8 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
     // Dedupe por persona: con 2 turnos al día una persona puede tener 2 filas
     const del_dia = asistSemana.filter(a=>a.fecha===fecha)
     const personasDelDia = Array.from(new Set(del_dia.map(a=>a.persona_id)))
-    const practica = personasDelDia.filter(pid=>personas.find(x=>x.id===pid)?.rol==='Practicante')
-    const senati   = personasDelDia.filter(pid=>personas.find(x=>x.id===pid)?.rol==='SENATI')
+    const practica = personasDelDia.filter(pid=>{const x=personas.find(x=>x.id===pid); return x?.rol==='Practicante' && x?.origen!=='SENATI'})
+    const senati   = personasDelDia.filter(pid=>personas.find(x=>x.id===pid)?.origen==='SENATI')
     const volunt   = personasDelDia.filter(pid=>personas.find(x=>x.id===pid)?.rol==='Voluntario')
     return {practica:practica.length, senati:senati.length, volunt:volunt.length, total:personasDelDia.length}
   })
@@ -212,7 +212,7 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
                   <div style={{width:32,height:32,borderRadius:'50%',background:p.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'white',flexShrink:0}}>{p.nombre.charAt(0)}</div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.nombre}</div>
-                    <div style={{fontSize:10,color:'#94a3b8'}}>{p.rol==='Practicante'?`Practicante UNASAM · ${p.subrol||''}`:p.rol==='SENATI'?`Practicante SENATI · ${p.subrol||''}`:p.rol} · {p.area||''}</div>
+                    <div style={{fontSize:10,color:'#94a3b8'}}>{p.origen==='SENATI'?`Practicante SENATI · ${p.subrol||''}`:p.rol==='Practicante'?`Practicante UNASAM · ${p.subrol||''}`:p.rol} · {p.area||''}</div>
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <div style={{width:8,height:8,borderRadius:'50%',background:COLOR[estado]??'#94a3b8'}}/>

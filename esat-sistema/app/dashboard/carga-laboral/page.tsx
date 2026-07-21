@@ -74,7 +74,7 @@ export default function CargaLaboralPage() {
                         </div>
                       </td>
                       <td style={{padding:'10px 14px',borderBottom:'1px solid #e2e8f0',fontSize:11,color:'#94a3b8'}}>
-                        {p.rol==='SENATI'?`SENATI · ${p.subrol}`:p.rol==='Practicante'?`Prac. · ${p.subrol}`:p.rol}
+                        {p.origen==='SENATI'?`SENATI · ${p.subrol}`:p.rol==='Practicante'?`Prac. · ${p.subrol}`:p.rol}
                       </td>
                       <td style={{padding:'10px 14px',borderBottom:'1px solid #e2e8f0',fontSize:12,fontWeight:600,color:'#002F6C'}}>{hs.toFixed(1)}h</td>
                       <td style={{padding:'10px 14px',borderBottom:'1px solid #e2e8f0',fontSize:12,fontWeight:600}}>{ta.length}</td>
@@ -98,8 +98,13 @@ export default function CargaLaboralPage() {
 
       {/* Resumen por rol */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:14}}>
-        {['Practicante','SENATI','Voluntario','Asistente'].map(rol=>{
-          const gp=esat.filter(p=>p.rol===rol)
+        {[
+          {rol:'Practicante', match:(p:any)=>p.rol==='Practicante' && p.origen!=='SENATI'},
+          {rol:'SENATI',       match:(p:any)=>p.origen==='SENATI'},
+          {rol:'Voluntario',   match:(p:any)=>p.rol==='Voluntario'},
+          {rol:'Asistente',    match:(p:any)=>p.rol==='Asistente'},
+        ].map(({rol,match})=>{
+          const gp=esat.filter(match)
           if(!gp.length) return null
           const totalHs=gp.reduce((a,p)=>a+horasSemanales(p.id),0)
           const totalTareas=gp.reduce((a,p)=>a+tareasActivas(p.id).length,0)

@@ -7,10 +7,10 @@ import { es } from 'date-fns/locale'
 const DIAS = ['L','M','X','J','V'] as const
 const DIAS_NM: Record<string,string> = {L:'Lunes',M:'Martes',X:'Miércoles',J:'Jueves',V:'Viernes'}
 const GRUPOS_HS = [
-  {rol:'Practicante',label:'🎓 Practicantes UNASAM',color:'#1e40af'},
-  {rol:'SENATI',     label:'🔧 Practicantes Externos (SENATI)',color:'#92400e'},
-  {rol:'Voluntario', label:'🤝 Voluntarios ESAT',color:'#15803d'},
-  {rol:'Asistente',  label:'💼 Asistentes T. Completo',color:'#374151'},
+  {rol:'Practicante',label:'🎓 Practicantes UNASAM',color:'#1e40af', match:(p:any)=>p.rol==='Practicante' && p.origen!=='SENATI'},
+  {rol:'SENATI',     label:'🔧 Practicantes Externos (SENATI)',color:'#92400e', match:(p:any)=>p.origen==='SENATI'},
+  {rol:'Voluntario', label:'🤝 Voluntarios ESAT',color:'#15803d', match:(p:any)=>p.rol==='Voluntario'},
+  {rol:'Asistente',  label:'💼 Asistentes T. Completo',color:'#374151', match:(p:any)=>p.rol==='Asistente'},
 ]
 
 function turnoCell(franjas:any[]){
@@ -280,7 +280,7 @@ const recuperacionesConNombre = recuperacionesFiltradas.map(r => {
 
       {/* Tabla de horarios por grupo */}
       {GRUPOS_HS.map(g=>{
-        const gp=esat.filter(p=>p.rol===g.rol)
+        const gp=esat.filter(g.match)
         if(!gp.length) return null
         return (
           <div key={g.rol} style={{marginBottom:28}}>

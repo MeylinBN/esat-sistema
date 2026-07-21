@@ -11,10 +11,10 @@ const DIAS_COMPLETOS: Record<number,string> = {
 }
 
 const GRUPOS = [
-  {key:'Practicante', label:'🎓 Practicantes UNASAM', color:'#1e40af'},
-  {key:'SENATI',      label:'🔧 Practicantes Externos (SENATI)', color:'#92400e'},
-  {key:'Voluntario',  label:'🤝 Voluntarios ESAT', color:'#15803d'},
-  {key:'Asistente',   label:'💼 Asistentes T. Completo', color:'#374151'},
+  {key:'Practicante', label:'🎓 Practicantes UNASAM', color:'#1e40af', match:(p:any)=>p.rol==='Practicante' && p.origen!=='SENATI'},
+  {key:'SENATI',      label:'🔧 Practicantes Externos (SENATI)', color:'#92400e', match:(p:any)=>p.origen==='SENATI'},
+  {key:'Voluntario',  label:'🤝 Voluntarios ESAT', color:'#15803d', match:(p:any)=>p.rol==='Voluntario'},
+  {key:'Asistente',   label:'💼 Asistentes T. Completo', color:'#374151', match:(p:any)=>p.rol==='Asistente'},
 ]
 
 function turnoLabel(franjas: any[]) {
@@ -359,7 +359,7 @@ export default function AsistenciaPage() {
         <>
           {GRUPOS.map(grupo=>{
             // ✅ CORRECCIÓN: Filtrar por grupo del usuario
-            const gpersonas = personasDelGrupo.filter(p=>p.rol===grupo.key)
+            const gpersonas = personasDelGrupo.filter(grupo.match)
             if(!gpersonas.length) return null
             const gpresentes = gpersonas.filter(p=>getAsistenciasPersona(p.id).some(a=>['presente','tarde'].includes(a.estado))).length
             return (
@@ -416,7 +416,7 @@ export default function AsistenciaPage() {
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{fontSize:12,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.nombre}</div>
                             <div style={{fontSize:9,color:'#94a3b8',marginTop:1}}>
-                              {p.rol==='SENATI'?`Prac. SENATI · ${p.subrol}`:p.rol==='Practicante'?`Prac. UNASAM · ${p.subrol}`:p.rol}
+                              {p.origen==='SENATI'?`Prac. SENATI · ${p.subrol}`:p.rol==='Practicante'?`Prac. UNASAM · ${p.subrol}`:p.rol}
                             </div>
                             {(tieneFlex || tieneTE) && (
                               <div style={{fontSize:9,color:'#7c3aed',marginTop:2,fontWeight:600}}>
@@ -504,7 +504,7 @@ export default function AsistenciaPage() {
                           <div style={{width:28,height:28,borderRadius:'50%',background:p.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'white'}}>{p.nombre.charAt(0)}</div>
                           <div>
                             <div style={{fontSize:12,fontWeight:600}}>{p.nombre}</div>
-                            <div style={{fontSize:10,color:'#94a3b8'}}>{p.rol==='SENATI'?'SENATI':p.rol==='Practicante'?`UNASAM · ${p.subrol}`:p.rol}</div>
+                            <div style={{fontSize:10,color:'#94a3b8'}}>{p.origen==='SENATI'?'SENATI':p.rol==='Practicante'?`UNASAM · ${p.subrol}`:p.rol}</div>
                           </div>
                         </div>
                       </td>

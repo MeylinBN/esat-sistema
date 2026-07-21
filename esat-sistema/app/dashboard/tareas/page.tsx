@@ -347,7 +347,7 @@ export default function TareasPage() {
                   <div style={{width:40,height:40,borderRadius:'50%',background:p.color,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:15,color:'white'}}>{p.nombre.charAt(0)}</div>
                   <div style={{flex:1}}>
                     <div style={{fontSize:14,fontWeight:600,color:'#0f172a'}}>{p.nombre}</div>
-                    <div style={{fontSize:11,color:'#64748b'}}>{p.rol==='SENATI'?`SENATI · ${p.subrol}`:p.subrol??p.rol}</div>
+                    <div style={{fontSize:11,color:'#64748b'}}>{p.origen==='SENATI'?`SENATI · ${p.subrol}`:p.subrol??p.rol}</div>
                   </div>
                   <div style={{display:'flex',gap:12}}>
                     <div style={{textAlign:'center'}}><div style={{fontSize:16,fontWeight:700,color:'#0369a1'}}>{asignadas}</div><div style={{fontSize:9,color:'#94a3b8',textTransform:'uppercase'}}>Asignadas</div></div>
