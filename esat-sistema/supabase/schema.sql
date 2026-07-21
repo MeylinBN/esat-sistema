@@ -58,6 +58,7 @@ create table if not exists public.asistencias (
   id          uuid primary key default uuid_generate_v4(),
   persona_id  uuid not null references public.personas(id) on delete cascade,
   fecha       date not null default current_date,
+  turno       text not null default 'unico' check (turno in ('manana','tarde','unico')),
   hora_entrada time,
   hora_salida  time,
   estado      text not null default 'presente'
@@ -69,7 +70,7 @@ create table if not exists public.asistencias (
   recuperacion_aprobada boolean,
   registrado_por uuid references public.personas(id),
   created_at  timestamptz default now(),
-  unique (persona_id, fecha)
+  unique (persona_id, fecha, turno)
 );
 
 -- ─── TABLA: permisos ───────────────────────────────────────

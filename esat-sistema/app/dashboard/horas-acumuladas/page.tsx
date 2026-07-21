@@ -48,26 +48,13 @@ async function loadGrupos(){
     }
   }
 
-  function calcularHorasDia(entrada1: string, salida1: string, entrada2?: string, salida2?: string): number {
-    let totalHoras = 0
-    
-    // Primer turno
-    if (entrada1 && salida1) {
-      const [hE1, mE1] = entrada1.split(':').map(Number)
-      const [hS1, mS1] = salida1.split(':').map(Number)
-      const minutos1 = (hS1 * 60 + mS1) - (hE1 * 60 + mE1)
-      if (minutos1 > 0) totalHoras += minutos1 / 60
-    }
-    
-    // Segundo turno (si existe)
-    if (entrada2 && salida2) {
-      const [hE2, mE2] = entrada2.split(':').map(Number)
-      const [hS2, mS2] = salida2.split(':').map(Number)
-      const minutos2 = (hS2 * 60 + mS2) - (hE2 * 60 + mE2)
-      if (minutos2 > 0) totalHoras += minutos2 / 60
-    }
-    
-    return totalHoras
+  // Horas de UN registro de asistencia (1 fila = 1 turno, gracias al campo "turno")
+  function calcularHorasDia(entrada?: string, salida?: string): number {
+    if (!entrada || !salida) return 0
+    const [hE, mE] = entrada.split(':').map(Number)
+    const [hS, mS] = salida.split(':').map(Number)
+    const minutos = (hS * 60 + mS) - (hE * 60 + mE)
+    return minutos > 0 ? minutos / 60 : 0
   }
 
   function formatoHoras(horas: number): string {
@@ -100,13 +87,8 @@ async function loadGrupos(){
   // Calcular totales DINÁMICOS según el filtro
 const stats = {
     totalPersonas: Object.keys(porPersona).length,
-    totalHoras: Object.values(porPersona).flat().reduce((acc: number, a: any) => 
-      acc + calcularHorasDia(
-        a.hora_entrada?.slice(0,5), 
-        a.hora_salida?.slice(0,5),
-        a.hora_entrada_2?.slice(0,5),  // ✅ Segundo turno
-        a.hora_salida_2?.slice(0,5)     // ✅ Segundo turno
-      ), 0
+    totalHoras: Object.values(porPersona).flat().reduce((acc: number, a: any) =>
+      acc + calcularHorasDia(a.hora_entrada?.slice(0,5), a.hora_salida?.slice(0,5)), 0
     ),
     porGrupo: gruposConfig.reduce((acc, grupo) => {
       acc[grupo] = personas.filter(p => p.grupo === grupo && porPersona[p.id]).length
@@ -197,14 +179,18 @@ const stats = {
           .filter(p => porPersona[p.id])
           .map(p => {
             const asistenciasPersona = porPersona[p.id] || []
-            const totalHorasPersona = asistenciasPersona.reduce((acc: number, a: any) => 
-              acc + calcularHorasDia(
-                a.hora_entrada?.slice(0,5), 
-                a.hora_salida?.slice(0,5),
-                a.hora_entrada_2?.slice(0,5),
-                a.hora_salida_2?.slice(0,5)
-              ), 0
+            const totalHorasPersona = asistenciasPersona.reduce((acc: number, a: any) =>
+              acc + calcularHorasDia(a.hora_entrada?.slice(0,5), a.hora_salida?.slice(0,5)), 0
             )
+
+            // Agrupar por fecha: puede haber hasta 2 filas el mismo día (mañana/tarde)
+            const porFecha: Record<string, any[]> = {}
+            asistenciasPersona.forEach(a => {
+              if (!porFecha[a.fecha]) porFecha[a.fecha] = []
+              porFecha[a.fecha].push(a)
+            })
+            const diasOrdenados = Object.entries(porFecha)
+              .sort((a,b) => new Date(b[0]).getTime() - new Date(a[0]).getTime())
 
             return (
               <div key={p.id} style={{ 
@@ -250,22 +236,23 @@ const stats = {
                       </tr>
                     </thead>
                     <tbody>
-                      {asistenciasPersona
-                        .sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
-                        .map((a, i) => {
-                          const horasTurno1 = calcularHorasDia(a.hora_entrada?.slice(0,5), a.hora_salida?.slice(0,5))
-                          const horasTurno2 = calcularHorasDia(a.hora_entrada_2?.slice(0,5), a.hora_salida_2?.slice(0,5))
+                      {diasOrdenados.map(([fecha, filas]) => {
+                          const rowManana = filas.find(f=>f.turno==='manana') ?? filas.find(f=>f.turno==='unico')
+                          const rowTarde = filas.find(f=>f.turno==='tarde')
+                          const horasTurno1 = calcularHorasDia(rowManana?.hora_entrada?.slice(0,5), rowManana?.hora_salida?.slice(0,5))
+                          const horasTurno2 = calcularHorasDia(rowTarde?.hora_entrada?.slice(0,5), rowTarde?.hora_salida?.slice(0,5))
                           const horasTotales = horasTurno1 + horasTurno2
-                          
+                          const estadoDia = filas.some(f=>f.estado==='tarde') ? 'tarde' : filas[0].estado
+
                           return (
-                            <tr key={i} style={{ borderBottom:'1px solid #f1f5f9' }}>
+                            <tr key={fecha} style={{ borderBottom:'1px solid #f1f5f9' }}>
                               <td style={{ padding:'8px', color:'#0f172a' }}>
-                                {format(parseISO(a.fecha), 'EEE d MMM', { locale: es })}
+                                {format(parseISO(fecha), 'EEE d MMM', { locale: es })}
                               </td>
                               <td style={{ padding:'8px', textAlign:'center' }}>
-                                {a.hora_entrada && a.hora_salida ? (
+                                {rowManana?.hora_entrada && rowManana?.hora_salida ? (
                                   <div style={{ fontSize:11 }}>
-                                    <div style={{ color:'#475569' }}>{a.hora_entrada.slice(0,5)} - {a.hora_salida.slice(0,5)}</div>
+                                    <div style={{ color:'#475569' }}>{rowManana.hora_entrada.slice(0,5)} - {rowManana.hora_salida.slice(0,5)}</div>
                                     <div style={{ color:'#002F6C', fontWeight:600 }}>{formatoHoras(horasTurno1)}</div>
                                   </div>
                                 ) : (
@@ -273,9 +260,9 @@ const stats = {
                                 )}
                               </td>
                               <td style={{ padding:'8px', textAlign:'center' }}>
-                                {a.hora_entrada_2 && a.hora_salida_2 ? (
+                                {rowTarde?.hora_entrada && rowTarde?.hora_salida ? (
                                   <div style={{ fontSize:11 }}>
-                                    <div style={{ color:'#475569' }}>{a.hora_entrada_2.slice(0,5)} - {a.hora_salida_2.slice(0,5)}</div>
+                                    <div style={{ color:'#475569' }}>{rowTarde.hora_entrada.slice(0,5)} - {rowTarde.hora_salida.slice(0,5)}</div>
                                     <div style={{ color:'#002F6C', fontWeight:600 }}>{formatoHoras(horasTurno2)}</div>
                                   </div>
                                 ) : (
@@ -286,12 +273,12 @@ const stats = {
                                 {horasTotales > 0 ? formatoHoras(horasTotales) : '—'}
                               </td>
                               <td style={{ padding:'8px', textAlign:'center' }}>
-                                <span style={{ 
+                                <span style={{
                                   padding:'3px 8px', borderRadius:12, fontSize:10, fontWeight:600,
-                                  background: a.estado==='tarde' ? '#fef3c7' : '#dcfce7',
-                                  color: a.estado==='tarde' ? '#b45309' : '#15803d'
+                                  background: estadoDia==='tarde' ? '#fef3c7' : '#dcfce7',
+                                  color: estadoDia==='tarde' ? '#b45309' : '#15803d'
                                 }}>
-                                  {a.estado}
+                                  {estadoDia}
                                 </span>
                               </td>
                             </tr>

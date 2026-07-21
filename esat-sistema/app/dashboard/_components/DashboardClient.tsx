@@ -48,8 +48,9 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
 
   // Filtro ESAT (excluir EcoBIOTEM y Coordinadores)
   const esat = (personas??[]).filter(p=>p.rol!=='EcoBIOTEM' && p.rol!=='Coordinador')
-  const presentes = asistHoy.filter(a=>['presente','tarde'].includes(a.estado)).length
-  const tardanzas = asistHoy.filter(a=>a.estado==='tarde').length
+  // Dedupe por persona: con 2 turnos al día una persona puede tener 2 filas hoy
+  const presentes = new Set(asistHoy.filter(a=>['presente','tarde'].includes(a.estado)).map(a=>a.persona_id)).size
+  const tardanzas = new Set(asistHoy.filter(a=>a.estado==='tarde').map(a=>a.persona_id)).size
 
   // Avance promedio de tareas activas
   const tareasActivas = tareas.filter(t=>t.estado==='en_progreso')
@@ -64,11 +65,13 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
   const lunes0 = startOfWeek(new Date(),{weekStartsOn:1})
   const datosSemana = DIAS_SEMANA.map((_,i)=>{
     const fecha = format(addDays(lunes0,i),'yyyy-MM-dd')
+    // Dedupe por persona: con 2 turnos al día una persona puede tener 2 filas
     const del_dia = asistSemana.filter(a=>a.fecha===fecha)
-    const practica = del_dia.filter(a=>{const p=personas.find(x=>x.id===a.persona_id);return p?.rol==='Practicante'})
-    const senati   = del_dia.filter(a=>{const p=personas.find(x=>x.id===a.persona_id);return p?.rol==='SENATI'})
-    const volunt   = del_dia.filter(a=>{const p=personas.find(x=>x.id===a.persona_id);return p?.rol==='Voluntario'})
-    return {practica:practica.length, senati:senati.length, volunt:volunt.length, total:del_dia.length}
+    const personasDelDia = Array.from(new Set(del_dia.map(a=>a.persona_id)))
+    const practica = personasDelDia.filter(pid=>personas.find(x=>x.id===pid)?.rol==='Practicante')
+    const senati   = personasDelDia.filter(pid=>personas.find(x=>x.id===pid)?.rol==='SENATI')
+    const volunt   = personasDelDia.filter(pid=>personas.find(x=>x.id===pid)?.rol==='Voluntario')
+    return {practica:practica.length, senati:senati.length, volunt:volunt.length, total:personasDelDia.length}
   })
   const maxBar = Math.max(...datosSemana.map(d=>d.total),1)
 

@@ -39,11 +39,15 @@ export default function AsistenciaPage() {
 
   if (loading) return <div style={{ padding:40, textAlign:'center', color:'var(--txt3)' }}>Cargando...</div>
 
-  // Asistencia por persona
+  // Asistencia por persona (por día, no por fila: una persona puede tener
+  // hasta 2 registros el mismo día si trabaja mañana y tarde)
   const asistPorPersona = personas.filter(p => p.grupo === 'ESAT').map(p => {
     const registros = asistencias.filter(a => a.persona_id === p.id)
-    const presentes = registros.filter(a => ['presente','tarde'].includes(a.estado)).length
-    return { nombre: p.nombre.split(' ')[0], presentes, total: registros.length }
+    const diasUnicos = Array.from(new Set(registros.map(a => a.fecha)))
+    const diasPresentes = diasUnicos.filter(fecha =>
+      registros.some(a => a.fecha === fecha && ['presente','tarde'].includes(a.estado))
+    )
+    return { nombre: p.nombre.split(' ')[0], presentes: diasPresentes.length, total: diasUnicos.length }
   })
 
   // Distribución de roles

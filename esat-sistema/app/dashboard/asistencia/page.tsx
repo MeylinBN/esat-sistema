@@ -53,6 +53,7 @@ export default function AsistenciaPage() {
   const [loading, setLoading]         = useState(true)
   const [modal, setModal]             = useState(false)
   const [mPerId, setMPerId]           = useState('')
+  const [mTurno, setMTurno]           = useState<'manana'|'tarde'|'unico'>('unico')
   const [mTipo, setMTipo]             = useState<'entrada'|'salida'>('entrada')
   const [mHora, setMHora]             = useState(format(new Date(),'HH:mm'))
   const [mUsarHoraActual, setMUsarHoraActual] = useState(true)
@@ -102,8 +103,23 @@ export default function AsistenciaPage() {
 
   useEffect(()=>{load()},[load])
 
-  function getA(pid:string){return asistencias.find(a=>a.persona_id===pid)}
+  function getAsistenciasPersona(pid:string){ return asistencias.filter(a=>a.persona_id===pid) }
+  function getA(pid:string, turno?: 'manana'|'tarde'|'unico'){
+    const lista = getAsistenciasPersona(pid)
+    if(turno) return lista.find(a=>a.turno===turno)
+    return lista[0]
+  }
   function getHoy(pid:string){return horarios.filter(h=>h.persona_id===pid&&h.dia===diaKey)}
+  function turnoDeFranja(franja:any): 'manana'|'tarde'{
+    return parseInt(franja.hora_entrada) < 13 ? 'manana' : 'tarde'
+  }
+  // Turnos disponibles hoy para una persona (para saber si hace falta
+  // pedirle al coordinador que elija mañana/tarde al registrar)
+  function turnosHoy(pid:string): Array<'manana'|'tarde'>{
+    const franjas = getHoy(pid)
+    const turnos = Array.from(new Set(franjas.map(turnoDeFranja)))
+    return turnos as Array<'manana'|'tarde'>
+  }
   function tareasActivas(pid:string){return tareas.filter(t=>t.persona_id===pid&&t.estado==='en_progreso').length}
   
   function getFlexibilidad(pid:string){
@@ -112,6 +128,12 @@ export default function AsistenciaPage() {
   
   function tieneTiempoExtra(pid:string){
     return tiempoExtraHoy.some(te => te.persona_id === pid)
+  }
+
+  function seleccionarPersona(pid:string){
+    setMPerId(pid)
+    const turnos = pid ? turnosHoy(pid) : []
+    setMTurno(turnos.length===1 ? turnos[0] : turnos.length===2 ? turnos[0] : 'unico')
   }
 
   async function guardar(){
@@ -127,7 +149,7 @@ export default function AsistenciaPage() {
     
     const horaRegistro = mUsarHoraActual ? format(new Date(),'HH:mm') : mHora
     const horaCompleta = horaRegistro+':00'
-    const asist = getA(mPerId)
+    const asist = getA(mPerId, mTurno)
     const persona = personas.find(p=>p.id===mPerId)
     
     const flex = getFlexibilidad(mPerId)
@@ -145,7 +167,7 @@ export default function AsistenciaPage() {
     if(!asist){
       const estado = mEstado!=='presente' ? mEstado : (esRecuperacion ? 'presente' : tard>0?'tarde':'presente')
       const { error } = await supabase.from('asistencias').insert({
-        persona_id:mPerId,fecha:hoy,
+        persona_id:mPerId,fecha:hoy,turno:mTurno,
         hora_entrada:mTipo==='entrada'?horaCompleta:null,
         hora_salida:mTipo==='salida'?horaCompleta:null,
         hora_recuperacion: esRecuperacion ? horaCompleta : null,
@@ -186,8 +208,11 @@ export default function AsistenciaPage() {
   const grupoDelUsuario = currentUser?.grupo || 'ESAT'
   const personasDelGrupo = personas.filter(p => p.grupo === grupoDelUsuario && p.activo === true)
   const total = personasDelGrupo.length
-  const presentes = asistencias.filter(a=>['presente','tarde'].includes(a.estado)).length
-  const tardanzas = asistencias.filter(a=>a.estado==='tarde').length
+  // Dedupe por persona: con 2 turnos al día una persona puede tener 2 filas
+  const personasPresentes = new Set(asistencias.filter(a=>['presente','tarde'].includes(a.estado)).map(a=>a.persona_id))
+  const personasTarde = new Set(asistencias.filter(a=>a.estado==='tarde').map(a=>a.persona_id))
+  const presentes = personasPresentes.size
+  const tardanzas = personasTarde.size
   const conFlexibilidad = flexibilidadHoy.length
   const conTiempoExtra = tiempoExtraHoy.length
 
@@ -336,7 +361,7 @@ export default function AsistenciaPage() {
             // ✅ CORRECCIÓN: Filtrar por grupo del usuario
             const gpersonas = personasDelGrupo.filter(p=>p.rol===grupo.key)
             if(!gpersonas.length) return null
-            const gpresentes = gpersonas.filter(p=>['presente','tarde'].includes(getA(p.id)?.estado??'')).length
+            const gpresentes = gpersonas.filter(p=>getAsistenciasPersona(p.id).some(a=>['presente','tarde'].includes(a.estado))).length
             return (
               <div key={grupo.key} style={{marginBottom:24}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
@@ -366,7 +391,7 @@ export default function AsistenciaPage() {
                 alert(location.mensaje)
                 return
               }
-              setMPerId(p.id)
+              seleccionarPersona(p.id)
               setModal(true)
             }}
                         style={{background:cfg.bg,border:`1.5px solid ${cfg.border}`,borderRadius:12,padding:14,cursor:'pointer',transition:'all .2s',position:'relative'}}
@@ -462,8 +487,13 @@ export default function AsistenciaPage() {
               <tbody>
                 {/* ✅ CORRECCIÓN: Mapear personasDelGrupo en lugar de esat */}
                 {personasDelGrupo.map((p,i)=>{
-                  const a=getA(p.id)
-                  const cfg=ESTADO_CFG[a?.estado??'sin_registrar']??ESTADO_CFG.sin_registrar
+                  const asistPersona = getAsistenciasPersona(p.id)
+                  const asist1 = asistPersona[0]
+                  const asist2 = asistPersona[1]
+                  const estado = asistPersona.length > 0
+                    ? (asistPersona.some(a=>a.estado==='tarde') ? 'tarde' : asistPersona[0].estado)
+                    : 'sin_registrar'
+                  const cfg=ESTADO_CFG[estado]??ESTADO_CFG.sin_registrar
                   const franjas=getHoy(p.id)
                   const flex = getFlexibilidad(p.id)
                   const te = tieneTiempoExtra(p.id)
@@ -479,18 +509,26 @@ export default function AsistenciaPage() {
                         </div>
                       </td>
                       <td style={{padding:'10px 12px',fontSize:11,color:'#475569'}}>{turnoLabel(franjas)}</td>
-                      <td style={{padding:'10px 12px',fontSize:12,fontWeight:600}}>{a?.hora_entrada?.slice(0,5)??'—'}</td>
-                      <td style={{padding:'10px 12px',fontSize:12}}>{a?.hora_salida?.slice(0,5)??'—'}</td>
+                      <td style={{padding:'10px 12px',fontSize:12,fontWeight:600}}>
+                        {asist1?.hora_entrada?.slice(0,5)??'—'}
+                        {asist2 && <div style={{fontSize:10,color:'#64748b',fontWeight:400}}>{asist2.hora_entrada?.slice(0,5)}</div>}
+                      </td>
+                      <td style={{padding:'10px 12px',fontSize:12}}>
+                        {asist1?.hora_salida?.slice(0,5)??'—'}
+                        {asist2 && <div style={{fontSize:10,color:'#64748b'}}>{asist2.hora_salida?.slice(0,5)}</div>}
+                      </td>
                       <td style={{padding:'10px 12px'}}>
                         <span style={{padding:'3px 9px',borderRadius:20,fontSize:10,fontWeight:700,background:cfg.pill,color:cfg.ptxt}}>{cfg.label}</span>
                       </td>
-                      <td style={{padding:'10px 12px',fontSize:11,color:'#ea580c',fontWeight:600}}>{a?.tardanza_min>0?`+${a.tardanza_min} min`:'—'}</td>
+                      <td style={{padding:'10px 12px',fontSize:11,color:'#ea580c',fontWeight:600}}>
+                        {asist1?.tardanza_min>0?`+${asist1.tardanza_min} min`:'—'}
+                      </td>
                       <td style={{padding:'10px 12px',fontSize:11}}>
                         {flex && <span style={{color:'#7c3aed',fontWeight:600}}>{flex.minutos_gracia}min</span>}
                         {te && <span style={{color:'#7c3aed',fontWeight:600,marginLeft:4}}>TE</span>}
                         {!flex && !te && '—'}
                       </td>
-                      <td style={{padding:'10px 12px',fontSize:11,color:'#94a3b8'}}>{a?.observacion??'—'}</td>
+                      <td style={{padding:'10px 12px',fontSize:11,color:'#94a3b8'}}>{asist1?.observacion??'—'}</td>
                     </tr>
                   )
                 })}
@@ -520,13 +558,27 @@ export default function AsistenciaPage() {
             
             <div style={{marginBottom:16}}>
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Persona</label>
-              <select value={mPerId} onChange={e=>setMPerId(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
+              <select value={mPerId} onChange={e=>seleccionarPersona(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
                 <option value="">Seleccionar...</option>
                 {/* ✅ CORRECCIÓN: Mapear personasDelGrupo */}
                 {personasDelGrupo.map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select>
             </div>
-            
+
+            {mPerId && turnosHoy(mPerId).length===2 && (
+              <div style={{marginBottom:16}}>
+                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Turno</label>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                  {(['manana','tarde'] as const).map(t=>(
+                    <button key={t} onClick={()=>setMTurno(t)} type="button"
+                      style={{padding:'10px',background:mTurno===t?'#002F6C':'white',color:mTurno===t?'white':'#475569',border:`2px solid ${mTurno===t?'#002F6C':'#e2e8f0'}`,borderRadius:9,cursor:'pointer',fontWeight:600,fontSize:13}}>
+                      {t==='manana'?'🌅 Mañana':'🌆 Tarde'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div style={{marginBottom:16}}>
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Tipo de registro</label>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>

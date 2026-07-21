@@ -168,8 +168,9 @@ export default function DashboardLogisticoPage() {
     load()
   }
 
-  const presentes = asistHoy.filter(a => ['presente', 'tarde'].includes(a.estado)).length
-  const tardanzas = asistHoy.filter(a => a.estado === 'tarde').length
+  // Dedupe por persona: con 2 turnos al día una persona puede tener 2 filas hoy
+  const presentes = new Set(asistHoy.filter(a => ['presente', 'tarde'].includes(a.estado)).map(a=>a.persona_id)).size
+  const tardanzas = new Set(asistHoy.filter(a => a.estado === 'tarde').map(a=>a.persona_id)).size
   const permisosPendientes = permisos.length
   const tareasActivas = tareas.filter(t => t.estado === 'en_progreso').length
 
