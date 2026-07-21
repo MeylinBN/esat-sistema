@@ -120,7 +120,9 @@ function LoginForm() {
             <input
               type="text"
               value={dni}
-              onChange={(e) => setDni(e.target.value)}
+              onChange={(e) => setDni(e.target.value.replace(/\D/g,'').slice(0,9))}
+              inputMode="numeric"
+              maxLength={9}
               placeholder="Ej: 73066140"
               required
               style={{

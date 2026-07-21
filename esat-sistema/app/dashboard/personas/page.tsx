@@ -153,11 +153,13 @@ async function loadConfiguraciones(){
     hPersona.forEach(h=>{
       if(horariosPorDia[h.dia]) {
         horariosPorDia[h.dia].push({
-          entrada: h.hora_entrada.slice(0,5), 
+          entrada: h.hora_entrada.slice(0,5),
           salida: h.hora_salida.slice(0,5)
         })
       }
     })
+    // Ordenar cada día por hora de entrada para que "mañana" siempre quede primero
+    DIAS.forEach(dia=>{ horariosPorDia[dia].sort((a,b)=>a.entrada.localeCompare(b.entrada)) })
     setMHorariosDia(horariosPorDia)
     setModal(true)
   }
@@ -175,8 +177,11 @@ async function loadConfiguraciones(){
       return
     }
     const nuevas = {...mHorariosDia}
-    const horaDefault = actuales.length === 0 ? {entrada:'08:00', salida:'13:00'} : {entrada:'15:00', salida:'18:00'}
-    nuevas[dia] = [...actuales, horaDefault]
+    // Si ya hay un turno de mañana, el nuevo va de tarde (y viceversa) —
+    // se decide por la hora real, no por la posición en el arreglo.
+    const yaHayManana = actuales.some(f => parseInt(f.entrada) < 13)
+    const horaDefault = yaHayManana ? {entrada:'15:00', salida:'18:00'} : {entrada:'08:00', salida:'13:00'}
+    nuevas[dia] = [...actuales, horaDefault].sort((a,b)=>a.entrada.localeCompare(b.entrada))
     setMHorariosDia(nuevas)
   }
 
@@ -417,7 +422,8 @@ async function loadConfiguraciones(){
               </div>
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>DNI *</label>
-                <input value={mDni} onChange={e=>setMDni(e.target.value)} placeholder="Nro. de documento"
+                <input value={mDni} onChange={e=>setMDni(e.target.value.replace(/\D/g,'').slice(0,9))}
+                  inputMode="numeric" maxLength={9} placeholder="Nro. de documento (8-9 dígitos)"
                   style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}
                 />
               </div>
@@ -486,7 +492,8 @@ async function loadConfiguraciones(){
                 </div>
                 <div>
                   <label style={{display:'block',fontSize:10,fontWeight:600,color:'#475569',marginBottom:4}}>Celular</label>
-                  <input type="tel" value={mCelular} onChange={e=>setMCelular(e.target.value)} placeholder="999 888 777"
+                  <input type="tel" value={mCelular} onChange={e=>setMCelular(e.target.value.replace(/\D/g,'').slice(0,9))}
+                    inputMode="numeric" maxLength={9} placeholder="999888777"
                     style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}
                   />
                 </div>
@@ -516,7 +523,8 @@ async function loadConfiguraciones(){
                 </div>
                 <div>
                   <label style={{display:'block',fontSize:10,fontWeight:600,color:'#475569',marginBottom:4}}>Teléfono</label>
-                  <input value={mContactoTelefono} onChange={e=>setMContactoTelefono(e.target.value)} placeholder="999 888 777"
+                  <input value={mContactoTelefono} onChange={e=>setMContactoTelefono(e.target.value.replace(/\D/g,'').slice(0,9))}
+                    inputMode="numeric" maxLength={9} placeholder="999888777"
                     style={{width:'100%',padding:'7px 10px',border:'1px solid #cbd5e1',borderRadius:6,fontFamily:'inherit',fontSize:12}}
                   />
                 </div>
@@ -543,13 +551,13 @@ async function loadConfiguraciones(){
                         <button onClick={()=>agregarFranja(dia)} 
                           style={{padding:'3px 8px',background:'#10b981',color:'white',border:'none',borderRadius:5,fontSize:10,cursor:'pointer',fontWeight:600}}
                         >
-                          + {(mHorariosDia[dia]||[]).length===0?'Turno mañana':'Turno tarde'}
+                          + {(mHorariosDia[dia]||[]).some(f=>parseInt(f.entrada)<13)?'Turno tarde':'Turno mañana'}
                         </button>
                       )}
                     </div>
                     {(mHorariosDia[dia]||[]).map((franja,idx)=>(
                       <div key={idx} style={{display:'flex',gap:8,alignItems:'center',marginBottom:6}}>
-                        <span style={{fontSize:10,color:'#94a3b8',minWidth:60}}>{idx===0?'🌅 Mañana':'🌆 Tarde'}</span>
+                        <span style={{fontSize:10,color:'#94a3b8',minWidth:60}}>{parseInt(franja.entrada)<13?'🌅 Mañana':'🌆 Tarde'}</span>
                         <input type="time" value={franja.entrada} onChange={e=>actualizarFranja(dia,idx,'entrada',e.target.value)}
                           style={{flex:1,padding:'6px 8px',border:'1px solid #d1d5db',borderRadius:6,fontSize:12}}
                         />
