@@ -56,7 +56,7 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
   const tareasActivas = tareas.filter(t=>t.estado==='en_progreso')
   const avancePromedio = tareasActivas.length===0 ? 0 : Math.round(
     tareasActivas.reduce((acc,t)=>{
-      const ua = avances.filter(a=>a.tarea_id===t.id).sort((a:any,b:any)=>b.semana.localeCompare(a.semana))[0]
+      const ua = avances.filter(a=>a.tarea_id===t.id).sort((a:any,b:any)=>b.fecha.localeCompare(a.fecha))[0]
       return acc+(ua?.porcentaje??0)
     },0)/tareasActivas.length
   )
@@ -176,7 +176,7 @@ export default function DashboardClient({ nombre }: DashboardClientProps) {
             if(!pArea.length) return null
             const tArea=tareas.filter(t=>pArea.some(p=>p.id===t.persona_id)&&t.estado==='en_progreso')
             const prom=tArea.length===0?0:Math.round(tArea.reduce((acc,t)=>{
-              const ua=avances.filter(a=>a.tarea_id===t.id).sort((a:any,b:any)=>b.semana.localeCompare(a.semana))[0]
+              const ua=avances.filter(a=>a.tarea_id===t.id).sort((a:any,b:any)=>b.fecha.localeCompare(a.fecha))[0]
               return acc+(ua?.porcentaje??0)
             },0)/tArea.length)
             return (

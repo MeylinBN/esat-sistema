@@ -23,7 +23,8 @@ export default function MiPanelPage() {
   const [modalAv, setModalAv] = useState(false)
   const [mTarea, setMTarea] = useState<any>(null)
   const [mPct, setMPct] = useState(0)
-  const [mSem, setMSem] = useState('')
+  const [mFecha, setMFecha] = useState(hoy)
+  const [mComentario, setMComentario] = useState('')
   const [saving, setSaving] = useState(false)
   
   const [motivoPermiso, setMotivoPermiso] = useState('')
@@ -63,7 +64,7 @@ export default function MiPanelPage() {
       supabase.from('horarios').select('*').eq('persona_id',p.id),
       supabase.from('asistencias').select('*').eq('persona_id',p.id).eq('fecha',hoy),
       supabase.from('tareas').select('*').eq('persona_id',p.id).in('estado', ['asignado', 'en_progreso', 'pendiente_revision', 'subsanacion']).order('created_at',{ascending:false}),
-      supabase.from('avances_semanales').select('*').order('semana',{ascending:false}),
+      supabase.from('avances_semanales').select('*').order('fecha',{ascending:false}),
       supabase.from('asistencias').select('*').eq('persona_id',p.id).gte('fecha',mesIni).lte('fecha',mesFin),
       supabase.from('flexibilidad_horaria').select(`*, coordinador:personas!flexibilidad_horaria_autorizado_por_fkey(nombre)`).eq('persona_id',p.id).eq('fecha',hoy).maybeSingle(),
       supabase.from('horas_extras').select('*').eq('persona_id',p.id).eq('fecha',hoy).eq('aprobado',true).maybeSingle(),
@@ -196,9 +197,12 @@ export default function MiPanelPage() {
   }
 
   async function guardarAvance(){
-    if(!mTarea||!mSem) return
+    if(!mTarea||!mFecha) return
     setSaving(true)
-    const { error } = await supabase.from('avances_semanales').upsert({tarea_id:mTarea.id,semana:mSem,porcentaje:mPct},{onConflict:'tarea_id,semana'})
+    const { error } = await supabase.from('avances_semanales').upsert(
+      {tarea_id:mTarea.id,fecha:mFecha,porcentaje:mPct,comentario:mComentario||null},
+      {onConflict:'tarea_id,fecha'}
+    )
     if(error){ setSaving(false); alert('Error al guardar avance: ' + error.message); return }
     if(mPct>=100){
       const { error: estError } = await supabase.from('tareas').update({estado:'completada'}).eq('id',mTarea.id)
@@ -361,7 +365,7 @@ export default function MiPanelPage() {
                       <div style={{display:'flex',gap:12,fontSize:11,color:'#94a3b8'}}>{t.fecha_limite&&<span>📅 {t.fecha_limite}</span>}{t.horas_estimadas&&<span>⏱ {t.horas_estimadas}h</span>}</div>
                       {ua&&<div style={{marginTop:7}}><div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'#94a3b8',marginBottom:3}}><span>Avance: {ua.porcentaje}%</span></div><div style={{height:5,background:'#e2e8f0',borderRadius:10,overflow:'hidden'}}><div style={{height:'100%',width:`${ua.porcentaje}%`,background:ua.porcentaje>=100?'#16a34a':'#2563C8',borderRadius:10}}/></div></div>}
                     </div>
-                    {t.estado!=='completada' && <button onClick={()=>{setMTarea(t);setMPct(ua?.porcentaje??0);setMSem('');setModalAv(true)}} style={{background:'#dbeafe',color:'#1d4ed8',border:'1px solid #93c5fd',borderRadius:8,padding:'6px 11px',fontSize:11,fontWeight:600,cursor:'pointer'}}>📊 Avance</button>}
+                    {t.estado!=='completada' && <button onClick={()=>{setMTarea(t);setMPct(ua?.porcentaje??0);setMFecha(hoy);setMComentario('');setModalAv(true)}} style={{background:'#dbeafe',color:'#1d4ed8',border:'1px solid #93c5fd',borderRadius:8,padding:'6px 11px',fontSize:11,fontWeight:600,cursor:'pointer'}}>📊 Avance</button>}
                   </div>
                 </div>
               )
@@ -377,11 +381,12 @@ export default function MiPanelPage() {
           <div style={{background:'white',borderRadius:18,padding:24,width:'100%',maxWidth:420}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}><h3 style={{fontSize:16,fontWeight:700}}>Reportar avance</h3><button onClick={()=>setModalAv(false)} style={{width:28,height:28,borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer'}}>×</button></div>
             <div style={{marginBottom:14,padding:'10px 14px',background:'#eff6ff',borderRadius:9,fontSize:13,fontWeight:600,color:'#002F6C'}}>{mTarea.titulo}</div>
-            <div style={{marginBottom:12}}><label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5}}>Semana</label><input value={mSem} onChange={e=>setMSem(e.target.value)} placeholder="Ej: Sem 19" style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9}}/></div>
+            <div style={{marginBottom:12}}><label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5}}>Día</label><input type="date" value={mFecha} max={hoy} onChange={e=>setMFecha(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9}}/></div>
             <div style={{marginBottom:8}}><label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5}}>Avance: {mPct}%</label><input type="range" min={0} max={100} step={5} value={mPct} onChange={e=>setMPct(+e.target.value)} style={{width:'100%',accentColor:'#002F6C'}}/></div>
             <div style={{height:8,background:'#e2e8f0',borderRadius:10,overflow:'hidden',marginBottom:16}}><div style={{height:'100%',width:`${mPct}%`,background:mPct>=100?'#16a34a':'#2563C8',borderRadius:10}}/></div>
             {mPct>=100&&<p style={{fontSize:12,color:'#16a34a',fontWeight:600,textAlign:'center',marginBottom:12}}>✓ Se marcará como completada</p>}
-            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}><button onClick={()=>setModalAv(false)} style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer'}}>Cancelar</button><button onClick={guardarAvance} disabled={saving||!mSem} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mSem||saving)?'not-allowed':'pointer'}}>{saving?'Guardando...':'Guardar'}</button></div>
+            <div style={{marginBottom:16}}><label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5}}>Duda o comentario para tu coordinador (opcional)</label><textarea value={mComentario} onChange={e=>setMComentario(e.target.value)} rows={2} placeholder="Ej: Tuve una duda con..." style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',resize:'vertical'}}/></div>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}><button onClick={()=>setModalAv(false)} style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer'}}>Cancelar</button><button onClick={guardarAvance} disabled={saving||!mFecha} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mFecha||saving)?'not-allowed':'pointer'}}>{saving?'Guardando...':'Guardar'}</button></div>
           </div>
         </div>
       )}

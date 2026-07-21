@@ -66,7 +66,7 @@ export default function TareasPage() {
   const [modalAv,  setModalAv]    = useState(false)
   const [mAvTarea, setMAvTarea]   = useState<any>(null)
   const [mAvPct,   setMAvPct]     = useState(0)
-  const [mAvSem,   setMAvSem]     = useState('')
+  const [mAvFecha, setMAvFecha]   = useState(format(new Date(),'yyyy-MM-dd'))
   const [mAvComentario, setMAvComentario] = useState('')
   
   const [semanasDesplegadas, setSemanasDesplegadas] = useState<Record<string, boolean>>({})
@@ -101,7 +101,7 @@ export default function TareasPage() {
       const [p,t,a] = await Promise.all([
         supabase.from('personas').select('id,nombre,color,rol,subrol').eq('activo',true).order('nombre'),
         supabase.from('tareas').select('*,personas(id,nombre,color)').order('created_at',{ascending:false}),
-        supabase.from('avances_semanales').select('*').order('semana'),
+        supabase.from('avances_semanales').select('*').order('fecha'),
       ])
       setPersonas(p.data??[])
       setTareas(t.data??[])
@@ -113,7 +113,7 @@ export default function TareasPage() {
     }
   }
 
-  function avancesTarea(tid:string){return avances.filter(a=>a.tarea_id===tid).sort((a,b)=>b.semana.localeCompare(a.semana))}
+  function avancesTarea(tid:string){return avances.filter(a=>a.tarea_id===tid).sort((a,b)=>b.fecha.localeCompare(a.fecha))}
   function ultimoAvance(tid:string){return avancesTarea(tid)[0]}
 
   function generarSemanasDisponibles() {
@@ -182,11 +182,11 @@ export default function TareasPage() {
   }
 
   async function guardarAvance(){
-    if(!mAvTarea||!mAvSem) return
+    if(!mAvTarea||!mAvFecha) return
     setSaving(true)
     const { error } = await supabase.from('avances_semanales').upsert(
-      {tarea_id:mAvTarea.id,semana:mAvSem,porcentaje:mAvPct,comentario:mAvComentario||null},
-      {onConflict:'tarea_id,semana'}
+      {tarea_id:mAvTarea.id,fecha:mAvFecha,porcentaje:mAvPct,comentario:mAvComentario||null},
+      {onConflict:'tarea_id,fecha'}
     )
     if(error){ setSaving(false); alert('Error al guardar avance: ' + error.message); return }
     if(mAvPct>=100){
@@ -305,7 +305,7 @@ export default function TareasPage() {
                         {Object.entries(ESTADO_CFG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
                       </select>
                       <div style={{display:'flex',gap:4}}>
-                        <button onClick={()=>{setMAvTarea(t);setMAvPct(ultimoAvance(t.id)?.porcentaje??0);setMAvSem('');setMAvComentario('');setModalAv(true)}} 
+                        <button onClick={()=>{setMAvTarea(t);setMAvPct(ultimoAvance(t.id)?.porcentaje??0);setMAvFecha(format(new Date(),'yyyy-MM-dd'));setMAvComentario('');setModalAv(true)}} 
                           style={{padding:'4px 8px',background:'#eff6ff',color:'#1d4ed8',border:'1px solid #bfdbfe',borderRadius:6,fontSize:10,cursor:'pointer',fontWeight:600}}>
                           📊 Avance
                         </button>
@@ -536,15 +536,8 @@ export default function TareasPage() {
             </div>
             <div style={{marginBottom:16,padding:'12px 14px',background:'#eff6ff',borderRadius:9,fontSize:13,fontWeight:600,color:'#002F6C',border:'1px solid #bfdbfe'}}>{mAvTarea.titulo}</div>
             <div style={{marginBottom:12}}>
-              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Semana *</label>
-              <select value={mAvSem} onChange={e=>setMAvSem(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}>
-                <option value="">Seleccionar semana...</option>
-                {generarSemanasDisponibles().map((sem:any)=>(
-                  <option key={sem.key} value={sem.key}>
-                    {sem.esAnterior ? '⬅️ ' : sem.esActual ? '📍 ' : ''}{sem.label}
-                  </option>
-                ))}
-              </select>
+              <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Día *</label>
+              <input type="date" value={mAvFecha} max={format(new Date(),'yyyy-MM-dd')} onChange={e=>setMAvFecha(e.target.value)} style={{width:'100%',padding:'9px 12px',border:'1.5px solid #e2e8f0',borderRadius:9,fontFamily:'inherit',fontSize:13}}/>
             </div>
             <div style={{marginBottom:12}}>
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:5,textTransform:'uppercase'}}>Estado de la tarea</label>
@@ -557,12 +550,12 @@ export default function TareasPage() {
                 {Object.entries(ESTADO_CFG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
               </select>
             </div>
-            {mAvTarea.estado === 'subsanacion' && (
-              <div style={{marginBottom:12}}>
-                <label style={{display:'block',fontSize:11,fontWeight:600,color:'#be185d',marginBottom:5,textTransform:'uppercase'}}>Comentario de subsanación</label>
-                <textarea value={mAvComentario} onChange={e=>setMAvComentario(e.target.value)} rows={2} placeholder="Indica qué debe corregir..." style={{width:'100%',padding:'9px 12px',border:'1.5px solid #f9a8d4',borderRadius:9,fontFamily:'inherit',fontSize:13,resize:'vertical',boxSizing:'border-box'}}/>
-              </div>
-            )}
+            <div style={{marginBottom:12}}>
+              <label style={{display:'block',fontSize:11,fontWeight:600,color: mAvTarea.estado==='subsanacion' ? '#be185d' : '#475569',marginBottom:5,textTransform:'uppercase'}}>
+                {mAvTarea.estado==='subsanacion' ? 'Comentario de subsanación' : 'Comentario (opcional)'}
+              </label>
+              <textarea value={mAvComentario} onChange={e=>setMAvComentario(e.target.value)} rows={2} placeholder={mAvTarea.estado==='subsanacion' ? 'Indica qué debe corregir...' : 'Nota sobre este avance...'} style={{width:'100%',padding:'9px 12px',border:`1.5px solid ${mAvTarea.estado==='subsanacion' ? '#f9a8d4' : '#e2e8f0'}`,borderRadius:9,fontFamily:'inherit',fontSize:13,resize:'vertical',boxSizing:'border-box'}}/>
+            </div>
             <div style={{marginBottom:16}}>
               <label style={{display:'block',fontSize:11,fontWeight:600,color:'#475569',marginBottom:8,textTransform:'uppercase'}}>Avance: {mAvPct}%</label>
               <input type="range" min={0} max={100} step={5} value={mAvPct} onChange={e=>setMAvPct(+e.target.value)} style={{width:'100%',accentColor:'#002F6C',cursor:'pointer'}}/>
@@ -573,7 +566,7 @@ export default function TareasPage() {
             {mAvPct>=100&&<p style={{fontSize:12,color:'#15803d',fontWeight:600,textAlign:'center',marginBottom:16,background:'#dcfce7',padding:'8px',borderRadius:8}}>✓ Se marcará como completada automáticamente</p>}
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <button onClick={()=>setModalAv(false)} style={{padding:'8px 16px',borderRadius:9,border:'1.5px solid #e2e8f0',background:'white',cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>Cancelar</button>
-              <button onClick={guardarAvance} disabled={saving||!mAvSem} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mAvSem||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mAvSem||saving)?0.6:1}}>{saving?'Guardando...':'Registrar avance'}</button>
+              <button onClick={guardarAvance} disabled={saving||!mAvFecha} style={{padding:'8px 18px',borderRadius:9,border:'none',background:'#002F6C',color:'white',cursor:(!mAvFecha||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit',opacity:(!mAvFecha||saving)?0.6:1}}>{saving?'Guardando...':'Registrar avance'}</button>
             </div>
           </div>
         </div>

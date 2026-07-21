@@ -133,11 +133,11 @@ create table if not exists public.tareas (
 create table if not exists public.avances_semanales (
   id         uuid primary key default uuid_generate_v4(),
   tarea_id   uuid not null references public.tareas(id) on delete cascade,
-  semana     text not null,
+  fecha      date not null default current_date,  -- día real del registro (avance diario)
   porcentaje int not null default 0 check (porcentaje between 0 and 100),
-  comentario text,
+  comentario text,  -- también usado para dudas/comentarios del alumno
   created_at timestamptz default now(),
-  unique (tarea_id, semana)
+  unique (tarea_id, fecha)
 );
 
 -- ─── TABLA: sesiones_eco ───────────────────────────────────
